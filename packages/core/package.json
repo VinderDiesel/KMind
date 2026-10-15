@@ -1,0 +1,31 @@
+{
+  "name": "@kmind/core",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node ../../scripts/copy-sql.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@kmind/shared": "workspace:*",
+    "gray-matter": "^4.0.3",
+    "tar": "^7.4.3",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/tar": "^6.1.13",
+    "typescript": "^5.8.2"
+  }
+}

@@ -1,0 +1,9 @@
+packages:
+  - "packages/*"
+  - "packages/adapters/*"
+
+onlyBuiltDependencies:
+  - esbuild
+
+allowBuilds:
+  esbuild: true

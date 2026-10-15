@@ -1,0 +1,29 @@
+{
+  "name": "kmind",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first knowledge management for AI coding terminals",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@12.4.2",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/** run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "pnpm -r --filter=./packages/** run typecheck",
+    "lint": "pnpm typecheck",
+    "clean": "pnpm -r --filter=./packages/** run clean",
+    "kmind": "node packages/cli/dist/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@vitest/coverage-v8": "^3.0.9",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}
+
