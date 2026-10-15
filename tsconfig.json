@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/shared" },
+    { "path": "./packages/core" },
+    { "path": "./packages/mcp-server" },
+    { "path": "./packages/cli" },
+    { "path": "./packages/adapters/claude-code" },
+    { "path": "./packages/adapters/cursor" },
+    { "path": "./packages/adapters/qoder" },
+    { "path": "./packages/adapters/codex" }
+  ]
+}

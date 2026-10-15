@@ -10,6 +10,10 @@
   "references": [
     { "path": "../shared" },
     { "path": "../core" },
-    { "path": "../mcp-server" }
+    { "path": "../mcp-server" },
+    { "path": "../adapters/claude-code" },
+    { "path": "../adapters/cursor" },
+    { "path": "../adapters/qoder" },
+    { "path": "../adapters/codex" }
   ]
 }
