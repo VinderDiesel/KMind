@@ -36,4 +36,9 @@ export class LruTtlCache<T> {
       else break;
     }
   }
+
+  /** Invalidate a cached key (e.g. after write tools). */
+  delete(key: string): void {
+    this.map.delete(key);
+  }
 }

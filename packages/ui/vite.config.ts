@@ -4,6 +4,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   base: '/',
+  resolve: {
+    // Prevent blank WebGL canvas from duplicate three.js copies
+    dedupe: ['three'],
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

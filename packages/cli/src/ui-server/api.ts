@@ -33,6 +33,24 @@ export async function handleUiApi(
     return { status: 200, body: await engine.status() };
   }
 
+  if (pathname === '/api/assets') {
+    const limit = clampInt(searchParams.get('limit'), 30, 1, 100);
+    const assets = await ctx.store.queryAssets({ limit });
+    return {
+      status: 200,
+      body: {
+        results: assets.map((a) => ({
+          id: a.id,
+          title: a.title,
+          type: a.type,
+          project: a.project,
+          status: a.status,
+          timestamp: a.timestamp,
+        })),
+      },
+    };
+  }
+
   if (pathname === '/api/health') {
     const report = await runHealthCheck(ctx.vault, ctx.store);
     const byRule: Record<string, number> = {};

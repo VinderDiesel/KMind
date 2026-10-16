@@ -69,6 +69,11 @@ export function searchAssets(q: string, limit = 12): Promise<{ results: SearchHi
   return getJson(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`);
 }
 
+/** List recent assets (no query required). */
+export function listAssets(limit = 20): Promise<{ results: SearchHit[] }> {
+  return getJson(`/api/assets?limit=${limit}`);
+}
+
 /** Fetch ego neighborhood graph. */
 export function fetchEgo(
   id: string,

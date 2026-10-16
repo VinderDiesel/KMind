@@ -36,7 +36,8 @@ CLI / MCP Server / UI HTTP → @kmind/core → Vault (~/.kmind)
 | Method | Path | Purpose |
 |:---|:---|:---|
 | GET | `/api/status` | Vault counters |
-| GET | `/api/health` | Full health report |
+| GET | `/api/health` | Full health report (`issueCount`，0=无告警) |
+| GET | `/api/assets?limit=` | List recent assets |
 | GET | `/api/search?q=` | Hybrid search |
 | GET | `/api/assets/:id` | Asset detail |
 | GET | `/api/ego/:id?depth=&cap=` | Ego graph (+ health flags on nodes) |

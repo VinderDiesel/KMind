@@ -49,6 +49,18 @@ describe('handleUiApi', () => {
     expect((res.body as { assetCount: number }).assetCount).toBe(2);
   });
 
+  it('given assets when GET then lists without query', async () => {
+    const res = await handleUiApi(
+      { vault, store },
+      'GET',
+      '/api/assets',
+      new URLSearchParams({ limit: '10' }),
+    );
+    expect(res.status).toBe(200);
+    const body = res.body as { results: Array<{ id: string }> };
+    expect(body.results.length).toBe(2);
+  });
+
   it('given search when GET then returns hits', async () => {
     const res = await handleUiApi(
       { vault, store },

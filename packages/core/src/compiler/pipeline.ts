@@ -93,6 +93,7 @@ class PipelineImpl implements CompilePipeline {
     const mapper = new OntologyMapper(this.deps.registry, this.deps.evolver);
     const graph = new GraphBuilder(this.deps.sqlite);
     const embedder = this.deps.embedder ?? new LocalEmbedder();
+    this.seq = await nextSeqForToday(this.deps.sqlite, new Date());
 
     // Optional adapter capture
     for (const adapter of this.deps.adapters ?? []) {
@@ -124,11 +125,7 @@ class PipelineImpl implements CompilePipeline {
         traceLifecycle(relativePath, 'capture', { relativePath });
 
         await this.deps.sqlite.setCompileState('classify', relativePath);
-        const classified = await classifier.classify({
-          title: candidate.title,
-          content: candidate.content,
-          rawPath: relativePath,
-        });
+        const classified = await classifier.classify(candidate);
         if (classified.confidence < 0.6) {
           this.diagnostics.add({
             category: 'CLASSIFY_ERROR',
@@ -153,11 +150,13 @@ class PipelineImpl implements CompilePipeline {
 
         const now = new Date();
         const id = nextKnowledgeId(now, this.seq++);
+        const assetProject = candidate.projectHint ?? project;
+        const isManual = relativePath.includes('manual') || Boolean(candidate.typeHint);
         const asset = graph.build({
           id,
           title: candidate.title.slice(0, 200) || id,
-          project,
-          body: formatBody(candidate.content, mapped.context),
+          project: assetProject,
+          body: formatBody(candidate.content, mapped.context, { preferRawBody: isManual }),
           mapped,
           rawPath: relativePath,
           terminal: relativePath.includes('manual') ? 'manual' : 'claude-code',
@@ -219,11 +218,17 @@ class PipelineImpl implements CompilePipeline {
 function formatBody(
   content: string,
   context: { problem: string; decision: string; rationale: string },
+  options?: { preferRawBody?: boolean },
 ): string {
+  const trimmed = content.trim();
+  // Manual captures already carry the full note; keep it intact.
+  if (options?.preferRawBody && trimmed.length > 0) {
+    return trimmed;
+  }
   return [
     '## 背景',
     '',
-    context.problem || content.slice(0, 500),
+    context.problem || trimmed.slice(0, 500),
     '',
     '## 决策',
     '',
@@ -233,4 +238,22 @@ function formatBody(
     '',
     context.rationale,
   ].join('\n');
+}
+
+/**
+ * Continue daily knowledge id sequence from existing assets (avoid overwriting).
+ */
+async function nextSeqForToday(store: SqliteStore, date: Date): Promise<number> {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  const prefix = `k-${y}-${m}-${d}-`;
+  const assets = await store.queryAssets({ limit: 100_000 });
+  let max = 0;
+  for (const asset of assets) {
+    if (!asset.id.startsWith(prefix)) continue;
+    const n = Number.parseInt(asset.id.slice(prefix.length), 10);
+    if (Number.isFinite(n)) max = Math.max(max, n);
+  }
+  return max + 1;
 }

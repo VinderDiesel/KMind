@@ -115,11 +115,12 @@ async function dispatch(
       return payload;
     }
     case 'kmind_status': {
+      // Short TTL: assetCount changes after capture/compile.
       const key = 'status';
       const hit = cache.get(key);
       if (hit) return hit;
       const status = await ctx.engine.status();
-      cache.set(key, status, 600_000);
+      cache.set(key, status, 5_000);
       return status;
     }
     case 'kmind_ontology_describe': {
@@ -129,26 +130,37 @@ async function dispatch(
     }
     case 'kmind_capture': {
       const content = String(args.content);
-      const title = String(args.title ?? content.slice(0, 80));
+      const title = String(args.title ?? content.split('\n')[0] ?? 'untitled')
+        .replace(/^#\s*/, '')
+        .trim()
+        .slice(0, 200);
       const project = String(args.project ?? 'global');
       const typeParse = KnowledgeTypeEnum.safeParse(args.type ?? 'best_practice');
       const type = typeParse.success ? typeParse.data : 'best_practice';
       const blob = new BlobStore(ctx.vault.rawDir);
       const day = new Date().toISOString().slice(0, 10);
-      const relativePath = path.join('manual', `${day}-${Date.now()}.md`);
+      const relativePath = path.join('manual', `${day}-${Date.now()}.jsonl`);
       await blob.writeRaw(
         relativePath,
-        JSON.stringify({
+        `${JSON.stringify({
           role: 'user',
-          content: `# ${title}\n\n${content}\n\ntype: ${type}\nproject: ${project}`,
+          title,
+          type,
+          project,
+          content,
           timestamp: new Date().toISOString(),
-        }) + '\n',
+        })}\n`,
       );
       const registry = new OntologyRegistry();
       registry.load(await loadOntology(ctx.vault.ontologyDir));
       const pipeline = createPipeline(ctx.vault, { sqlite: ctx.store, registry });
-      const result = await pipeline.run({ project, incremental: false, force: true });
-      return { captured: true, relativePath, compile: result };
+      const result = await pipeline.run({
+        project,
+        incremental: true,
+        force: false,
+      });
+      cache.delete('status');
+      return { captured: true, relativePath, title, type, compile: result };
     }
     case 'kmind_graph_query': {
       return ctx.engine.graphQuery(String(args.query ?? ''));

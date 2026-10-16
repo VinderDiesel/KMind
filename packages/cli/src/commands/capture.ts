@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { BlobStore, createPipeline } from '@kmind/core';
+import { KnowledgeTypeEnum } from '@kmind/shared';
 import type { AppContext } from '../context.js';
 import { success } from '../exit.js';
 
@@ -13,13 +14,22 @@ export async function cmdCapture(
 ): Promise<void> {
   const blob = new BlobStore(ctx.vault.rawDir);
   const day = new Date().toISOString().slice(0, 10);
-  const title = options.title ?? content.slice(0, 80);
-  const relativePath = path.join('manual', `${day}-${Date.now()}.md`);
+  const title = (options.title ?? content.split('\n')[0] ?? 'untitled')
+    .replace(/^#\s*/, '')
+    .trim()
+    .slice(0, 200);
+  const typeParse = KnowledgeTypeEnum.safeParse(options.type ?? 'best_practice');
+  const type = typeParse.success ? typeParse.data : 'best_practice';
+  const project = options.project ?? 'global';
+  const relativePath = path.join('manual', `${day}-${Date.now()}.jsonl`);
   await blob.writeRaw(
     relativePath,
     `${JSON.stringify({
       role: 'user',
-      content: `# ${title}\n\n${content}\n\ntype: ${options.type ?? 'best_practice'}`,
+      title,
+      type,
+      project,
+      content,
       timestamp: new Date().toISOString(),
     })}\n`,
   );
@@ -28,10 +38,11 @@ export async function cmdCapture(
     registry: ctx.registry,
     evolver: ctx.evolver,
   });
+  // Incremental: only the new raw file (and changed hashes) compile; ids continue from vault max.
   const result = await pipeline.run({
-    project: options.project ?? 'global',
-    force: true,
-    incremental: false,
+    project,
+    force: false,
+    incremental: true,
   });
-  success({ relativePath, compile: result }, ctx.json);
+  success({ relativePath, title, type, compile: result }, ctx.json);
 }

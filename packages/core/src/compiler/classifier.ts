@@ -9,6 +9,10 @@ export interface RawCandidate {
   content: string;
   session?: SessionRecord;
   rawPath: string;
+  /** When set (manual capture), classifier must honor this type. */
+  typeHint?: KnowledgeType;
+  projectHint?: string;
+  contextHint?: Partial<DecisionTrajectory>;
 }
 
 export interface ClassificationResult {
@@ -60,12 +64,33 @@ const RULES: Array<{ type: KnowledgeType; patterns: RegExp[]; tags: string[] }> 
   },
 ];
 
+const TYPE_TAGS: Record<KnowledgeType, string[]> = {
+  architecture_design: ['architecture'],
+  pitfall: ['pitfall'],
+  code_snippet: ['code'],
+  tool_usage: ['tool'],
+  process_spec: ['process'],
+  problem_solution: ['solution'],
+  best_practice: ['practice'],
+};
+
 /**
  * Local heuristic classifier (default). No network required.
  */
 export class HeuristicClassifier implements Classifier {
   async classify(candidate: RawCandidate): Promise<ClassificationResult> {
     const text = `${candidate.title}\n${candidate.content}`;
+    const context = buildContext(candidate, text);
+
+    if (candidate.typeHint) {
+      return {
+        type: candidate.typeHint,
+        confidence: 0.95,
+        context,
+        tags: TYPE_TAGS[candidate.typeHint] ?? ['manual'],
+      };
+    }
+
     let best: { type: KnowledgeType; score: number; tags: string[] } = {
       type: 'best_practice',
       score: 0.5,
@@ -84,14 +109,6 @@ export class HeuristicClassifier implements Classifier {
         }
       }
     }
-
-    const context: DecisionTrajectory = {
-      problem: extractSection(text, /problem|问题|背景/i) || candidate.title,
-      alternatives: [],
-      decision: extractSection(text, /decision|决策|方案/i) || truncate(candidate.content, 200),
-      rationale: extractSection(text, /rationale|原因|why/i) || 'Inferred from session content',
-      tradeOffs: [],
-    };
 
     return {
       type: best.type,
@@ -117,12 +134,35 @@ export class OllamaClassifier implements Classifier {
         signal: AbortSignal.timeout(500),
       });
       if (!res.ok) return this.fallback.classify(candidate);
-      // Full LLM prompt wiring can be enabled later; keep offline-safe fallback.
       return this.fallback.classify(candidate);
     } catch {
       return this.fallback.classify(candidate);
     }
   }
+}
+
+function buildContext(
+  candidate: RawCandidate,
+  text: string,
+): DecisionTrajectory {
+  const hint = candidate.contextHint ?? {};
+  return {
+    problem:
+      hint.problem?.trim() ||
+      extractSection(text, /problem|问题|背景/i) ||
+      candidate.title,
+    alternatives: hint.alternatives ?? [],
+    decision:
+      hint.decision?.trim() ||
+      extractSection(text, /decision|决策|方案/i) ||
+      truncate(candidate.content, 400),
+    rationale:
+      hint.rationale?.trim() ||
+      extractSection(text, /rationale|原因|why/i) ||
+      'Captured from explicit manual input',
+    tradeOffs: hint.tradeOffs ?? [],
+    outcome: hint.outcome,
+  };
 }
 
 function extractSection(text: string, heading: RegExp): string {

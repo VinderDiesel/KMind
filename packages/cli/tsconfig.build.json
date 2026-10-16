@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "composite": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "dist"],
+  "references": [
+    { "path": "../shared/tsconfig.json" },
+    { "path": "../core/tsconfig.json" },
+    { "path": "../mcp-server/tsconfig.json" },
+    { "path": "../adapters/claude-code/tsconfig.json" },
+    { "path": "../adapters/cursor/tsconfig.json" },
+    { "path": "../adapters/qoder/tsconfig.json" },
+    { "path": "../adapters/codex/tsconfig.json" },
+    { "path": "../adapters/kiro/tsconfig.json" }
+  ]
+}

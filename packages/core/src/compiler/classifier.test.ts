@@ -22,4 +22,16 @@ describe('HeuristicClassifier', () => {
     });
     expect(result.type).toBe('pitfall');
   });
+
+  it('given typeHint when classify then honors hint over heuristics', async () => {
+    const c = new HeuristicClassifier();
+    const result = await c.classify({
+      title: 'Install workflow',
+      content: '```bash\npnpm install\n```\n流程规范 for onboarding',
+      rawPath: 'manual/z.jsonl',
+      typeHint: 'process_spec',
+    });
+    expect(result.type).toBe('process_spec');
+    expect(result.confidence).toBeGreaterThanOrEqual(0.95);
+  });
 });
