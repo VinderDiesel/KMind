@@ -4,6 +4,7 @@ import { ClaudeCodeAdapter } from '../../packages/adapters/claude-code/src/index
 import { CursorAdapter } from '../../packages/adapters/cursor/src/index.js';
 import { QoderAdapter } from '../../packages/adapters/qoder/src/index.js';
 import { CodexAdapter } from '../../packages/adapters/codex/src/index.js';
+import { KiroAdapter } from '../../packages/adapters/kiro/src/index.js';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -13,6 +14,7 @@ const adapters: Adapter[] = [
   new CursorAdapter(),
   new QoderAdapter(),
   new CodexAdapter(),
+  new KiroAdapter(),
 ];
 
 describe('Adapter contract', () => {

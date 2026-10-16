@@ -11,6 +11,7 @@ import { ClaudeCodeAdapter } from '@kmind/adapter-claude-code';
 import { CursorAdapter } from '@kmind/adapter-cursor';
 import { QoderAdapter } from '@kmind/adapter-qoder';
 import { CodexAdapter } from '@kmind/adapter-codex';
+import { KiroAdapter } from '@kmind/adapter-kiro';
 import { KMindError } from '@kmind/shared';
 
 export interface AppContext {
@@ -53,6 +54,7 @@ export async function resolveContext(options: {
     new CursorAdapter(),
     new QoderAdapter(),
     new CodexAdapter(),
+    new KiroAdapter(),
   ];
   return {
     vault,

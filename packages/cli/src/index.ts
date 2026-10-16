@@ -13,6 +13,7 @@ import { cmdMcpServe } from './commands/mcp-serve.js';
 import { cmdAdaptersInstall, cmdAdaptersList } from './commands/adapters.js';
 import { cmdHook } from './commands/hook.js';
 import { cmdReindex } from './commands/reindex.js';
+import { cmdUi } from './commands/ui.js';
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 
@@ -156,6 +157,27 @@ program
       await cmdMcpServe(opts.vault);
     } catch (err) {
       fail(err, false);
+    }
+  });
+
+program
+  .command('ui')
+  .description('Open local read-only knowledge UI (127.0.0.1)')
+  .option('--port <n>', 'Port (default 7821)', '7821')
+  .option('--focus <id>', 'Open with focus asset id')
+  .option('--no-open', 'Do not open browser')
+  .action(async (cmdOpts) => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await withVaultOrPrompt(opts);
+      await cmdUi(ctx, {
+        port: Number(cmdOpts.port),
+        focus: cmdOpts.focus as string | undefined,
+        open: cmdOpts.open as boolean,
+      });
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
     }
   });
 

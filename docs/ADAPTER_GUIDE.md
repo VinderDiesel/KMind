@@ -23,3 +23,4 @@ Each adapter implements the `Adapter` interface from `@kmind/core`:
 | cursor | `@kmind/adapter-cursor` |
 | qoder | `@kmind/adapter-qoder` |
 | codex | `@kmind/adapter-codex` |
+| kiro | `@kmind/adapter-kiro` |

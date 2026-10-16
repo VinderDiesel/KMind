@@ -37,8 +37,19 @@ export {
 } from './query/engine.js';
 export { hybridSearch } from './query/hybrid.js';
 export { parseGraphQuery } from './query/graph-parser.js';
+export {
+  buildEgoGraph,
+  filterEgoHealthIssues,
+  EGO_DEFAULT_DEPTH,
+  EGO_DEFAULT_NODE_CAP,
+  EGO_MAX_DEPTH,
+  type EgoGraph,
+  type EgoLink,
+  type EgoNode,
+} from './query/ego.js';
 
 export { runHealthCheck, type HealthReport } from './health/checker.js';
+export type { HealthIssue } from './health/rules/expiry.js';
 export { Exporter } from './migration/exporter.js';
 export { Importer } from './migration/importer.js';
 

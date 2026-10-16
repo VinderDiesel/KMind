@@ -3,9 +3,9 @@
 KMind is a local-first knowledge system:
 
 ```
-CLI / MCP Server → @kmind/core → Vault (~/.kmind)
-                      ↑
-                 adapters (interface only)
+CLI / MCP Server / UI HTTP → @kmind/core → Vault (~/.kmind)
+                              ↑
+                         adapters (interface only)
 ```
 
 ## Layers
@@ -19,9 +19,28 @@ CLI / MCP Server → @kmind/core → Vault (~/.kmind)
 - `storage` — Vault, Markdown, SQLite, blob
 - `ontology` — load / validate / evolve
 - `compiler` — capture → classify → map → graph → embed → index
-- `query` — fulltext / structured / graph / semantic / hybrid
+- `query` — fulltext / structured / graph / semantic / hybrid / ego
 - `health` — lint rules
 - `migration` — export / import
+
+## Local UI (`kmind ui`)
+
+- Package `@kmind/ui` (Vite + React + `react-force-graph-3d`) builds static assets.
+- CLI serves them on `127.0.0.1:7821` (override with `--port`) plus read-only `/api/*`.
+- Graph model: **ego neighborhood** with **hop shells** (default depth 2, node cap 150).
+- Health: vault summary + focus-scoped issues; problem nodes weakly highlighted in the graph.
+- No write APIs; capture / compile / export remain CLI or MCP.
+
+### Read-only API
+
+| Method | Path | Purpose |
+|:---|:---|:---|
+| GET | `/api/status` | Vault counters |
+| GET | `/api/health` | Full health report |
+| GET | `/api/search?q=` | Hybrid search |
+| GET | `/api/assets/:id` | Asset detail |
+| GET | `/api/ego/:id?depth=&cap=` | Ego graph (+ health flags on nodes) |
+| GET | `/api/ego/:id/health` | Issues touching the ego node set |
 
 ## Storage notes
 
@@ -32,4 +51,3 @@ CLI / MCP Server → @kmind/core → Vault (~/.kmind)
 ## Iron rules
 
 See project `.cursorrules` (R-01–R-08).
-

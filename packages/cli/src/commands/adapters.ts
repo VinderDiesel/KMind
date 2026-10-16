@@ -1,8 +1,40 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { AppContext } from '../context.js';
 import { success, fail } from '../exit.js';
 import { KMindError } from '@kmind/shared';
+
+/**
+ * Absolute path to this CLI entry (`packages/cli/dist/index.js`).
+ */
+export function resolveCliEntry(): string {
+  return path.resolve(fileURLToPath(new URL('../index.js', import.meta.url)));
+}
+
+/**
+ * Rewrite kmind MCP server entries to `node <cli> mcp-serve`.
+ * Templates may still use `command: "kmind"` as a placeholder.
+ */
+export function withResolvedMcpLaunch(
+  content: Record<string, unknown>,
+  cliEntry = resolveCliEntry(),
+): Record<string, unknown> {
+  const launch = { command: 'node', args: [cliEntry, 'mcp-serve'] };
+  const out = structuredClone(content) as Record<string, unknown>;
+  for (const key of ['mcpServers', 'mcp_servers'] as const) {
+    const servers = out[key];
+    if (!servers || typeof servers !== 'object' || Array.isArray(servers)) continue;
+    const map = servers as Record<string, unknown>;
+    if (!('kmind' in map)) continue;
+    const prev =
+      map.kmind && typeof map.kmind === 'object' && !Array.isArray(map.kmind)
+        ? (map.kmind as Record<string, unknown>)
+        : {};
+    map.kmind = { ...prev, ...launch };
+  }
+  return out;
+}
 
 /**
  * List adapters with detect status.
@@ -39,6 +71,7 @@ export async function cmdAdaptersInstall(
     );
   }
   const tpl = adapter.getMcpConfig();
+  const content = withResolvedMcpLaunch(tpl.content);
   await fs.mkdir(path.dirname(tpl.targetPath), { recursive: true });
   let existing: Record<string, unknown> = {};
   try {
@@ -49,9 +82,9 @@ export async function cmdAdaptersInstall(
   } catch {
     existing = {};
   }
-  const merged = deepMerge(existing, tpl.content);
+  const merged = deepMerge(existing, content);
   await fs.writeFile(tpl.targetPath, JSON.stringify(merged, null, 2), 'utf8');
-  success({ installed: true, targetPath: tpl.targetPath }, ctx.json);
+  success({ installed: true, targetPath: tpl.targetPath, content }, ctx.json);
 }
 
 function deepMerge(

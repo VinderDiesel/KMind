@@ -24,6 +24,7 @@ export const TerminalEnum = z.enum([
   'cursor',
   'qoder',
   'codex',
+  'kiro',
   'manual',
 ]);
 export type Terminal = z.infer<typeof TerminalEnum>;

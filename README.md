@@ -3,7 +3,7 @@
 **你的 AI 编程工具会忘记一切，KMind 不会。**
 
 Local-first, AI-native knowledge compounding system.  
-Unify Claude Code, Cursor, Qoder & Codex sessions into a queryable knowledge graph via MCP.
+Unify Claude Code, Cursor, Qoder, Codex & Kiro sessions into a queryable knowledge graph via MCP.
 
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
@@ -28,7 +28,7 @@ Unify Claude Code, Cursor, Qoder & Codex sessions into a queryable knowledge gra
 
 | 特性 | 说明 |
 |:---|:---|
-| **多终端插件式接入** | Adapter 模式接入 Claude Code、Cursor、Qoder、Codex，新增终端通常少于 200 行 |
+| **多终端插件式接入** | Adapter 模式接入 Claude Code、Cursor、Qoder、Codex、Kiro，新增终端通常少于 200 行 |
 | **会话自动捕获** | 从 AI 编程会话中提取知识候选，无需手动整理 |
 | **七类知识资产** | 问题解决方案、最佳实践、架构设计、工具使用、踩坑记录、代码片段、流程规范 |
 | **知识图谱 + 本体** | 实体 / 概念 / 关系自动提取，本体 Schema 可扩展、可演化 |
@@ -73,6 +73,7 @@ pnpm kmind adapters install claude-code
 pnpm kmind adapters install cursor
 pnpm kmind adapters install qoder
 pnpm kmind adapters install codex
+pnpm kmind adapters install kiro
 ```
 
 ### 启动 MCP Server
@@ -94,7 +95,7 @@ pnpm kmind mcp-serve
 }
 ```
 
-`adapters install` 会尝试写入对应终端的 MCP 配置；也可按上面手动配置。
+`adapters install` 会把当前 CLI 的绝对路径写入对应终端的 MCP 配置（`node …/packages/cli/dist/index.js mcp-serve`）；也可按上面手动配置。
 
 ### 开始使用
 
@@ -119,7 +120,7 @@ pnpm kmind lint
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                   AI 编程终端层                              │
-│  Claude Code │ Cursor │ Qoder │ Codex │ ...                 │
+│  Claude Code │ Cursor │ Qoder │ Codex │ Kiro │ ...          │
 └──────────────────────┬──────────────────────────────────────┘
                        │ MCP Protocol
 ┌──────────────────────┼──────────────────────────────────────┐
@@ -132,7 +133,7 @@ pnpm kmind lint
 │                           │                                  │
 │  ┌────────────────────────┼───────────────────────────┐     │
 │  │         Adapter Registry (插件式接入)               │     │
-│  │  Claude │ Cursor │ Qoder │ Codex │ Custom          │     │
+│  │  Claude │ Cursor │ Qoder │ Codex │ Kiro │ Custom   │     │
 │  └────────────────────────┬───────────────────────────┘     │
 │                           │                                  │
 │  ┌────────────────────────┼───────────────────────────┐     │
@@ -177,9 +178,20 @@ pnpm kmind lint
 | `kmind import --input <path>` | 从归档导入 |
 | `kmind reindex` | 从 Markdown 重建 SQLite 索引 |
 | `kmind mcp-serve` | 启动 MCP Server（stdio） |
+| `kmind ui` | 打开本地只读知识 UI（`127.0.0.1:7821`） |
 | `kmind adapters list` | 列出适配器 |
 | `kmind adapters install <name>` | 为指定终端写入 MCP 配置 |
 | `kmind hook <event>` | 生命周期 Hook 入口 |
+
+### 本地知识 UI（M5）
+
+```bash
+pnpm build
+pnpm kmind ui
+# 或指定焦点：pnpm kmind ui --focus k-2026-01-01-001
+```
+
+浏览器打开后先搜索资产，进入 **3D ego 邻域**（默认 hop=2，节点上限 150）；右侧 HUD 展示与焦点相关的健康告警。仅绑定 `127.0.0.1`，API 只读。
 
 ---
 
@@ -248,7 +260,8 @@ pnpm kmind import --input backup.tar.gz
 | `@kmind/core` | 存储 / 本体 / 编译 / 检索 / 健康检查 |
 | `@kmind/mcp-server` | MCP Server |
 | `@kmind/shared` | 共享类型与工具 |
-| `@kmind/adapter-*` | Claude Code / Cursor / Qoder / Codex |
+| `@kmind/adapter-*` | Claude Code / Cursor / Qoder / Codex / Kiro |
+| `@kmind/ui` | 本地只读 Web UI（图谱 + 健康） |
 
 ---
 
@@ -299,9 +312,9 @@ pnpm typecheck
 
 - [x] M1：核心引擎（存储 + 本体 + 图谱 + MCP Server）
 - [x] M2：首个适配器（Claude Code）+ 自动捕获 + 七类分类
-- [x] M3：多终端适配器（Cursor / Qoder / Codex）+ Registry
+- [x] M3：多终端适配器（Cursor / Qoder / Codex / Kiro）+ Registry
 - [ ] M4：导出/导入增强 + Git 集成 + 多实例联邦
-- [ ] M5：知识健康可视化 + 图谱可视化 + v1.0 发布
+- [ ] M5：知识健康可视化 + 图谱可视化 + v1.0 发布（进行中：`kmind ui` 本地 3D ego + 健康 HUD）
 
 ---
 

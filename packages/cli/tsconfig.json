@@ -14,6 +14,7 @@
     { "path": "../adapters/claude-code" },
     { "path": "../adapters/cursor" },
     { "path": "../adapters/qoder" },
-    { "path": "../adapters/codex" }
+    { "path": "../adapters/codex" },
+    { "path": "../adapters/kiro" }
   ]
 }

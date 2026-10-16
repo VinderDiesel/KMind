@@ -27,6 +27,7 @@
     "@kmind/adapter-claude-code": "workspace:*",
     "@kmind/adapter-codex": "workspace:*",
     "@kmind/adapter-cursor": "workspace:*",
+    "@kmind/adapter-kiro": "workspace:*",
     "@kmind/adapter-qoder": "workspace:*",
     "@kmind/core": "workspace:*",
     "@kmind/mcp-server": "workspace:*",
