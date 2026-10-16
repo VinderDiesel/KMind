@@ -20,6 +20,8 @@ export interface CompileOptions {
   dryRun?: boolean;
   project?: string;
   force?: boolean;
+  /** Override vault `capture.minConfidence` for this run. */
+  minConfidence?: number;
 }
 
 export interface CompileResult {
@@ -27,6 +29,8 @@ export interface CompileResult {
   created: number;
   updated: number;
   skipped: number;
+  /** Raw kept pending because classify confidence was below the gate. */
+  gated: number;
   failed: Array<{ path: string; error: string }>;
   durationMs: number;
   diagnosticsMarkdown: string;
@@ -80,6 +84,7 @@ class PipelineImpl implements CompilePipeline {
       created: 0,
       updated: 0,
       skipped: 0,
+      gated: 0,
       failed: [],
       durationMs: 0,
       diagnosticsMarkdown: '',
@@ -94,6 +99,10 @@ class PipelineImpl implements CompilePipeline {
     const graph = new GraphBuilder(this.deps.sqlite);
     const embedder = this.deps.embedder ?? new LocalEmbedder();
     this.seq = await nextSeqForToday(this.deps.sqlite, new Date());
+
+    const vaultConfig = await this.vault.getConfig();
+    const minConfidence =
+      options.minConfidence ?? vaultConfig.capture.minConfidence;
 
     // Optional adapter capture
     for (const adapter of this.deps.adapters ?? []) {
@@ -126,13 +135,29 @@ class PipelineImpl implements CompilePipeline {
 
         await this.deps.sqlite.setCompileState('classify', relativePath);
         const classified = await classifier.classify(candidate);
-        if (classified.confidence < 0.6) {
+        const isManual =
+          relativePath.includes('manual') || Boolean(candidate.typeHint);
+        // Hard gate: keep low-confidence adapter raw in pending; manual/typeHint bypass.
+        if (!isManual && classified.confidence < minConfidence) {
+          result.gated += 1;
+          await this.deps.sqlite.setRawHash(relativePath, hash, 'pending');
+          this.diagnostics.add({
+            category: 'CLASSIFY_ERROR',
+            severity: 'medium',
+            message: `Gated: confidence ${classified.confidence.toFixed(2)} < ${minConfidence} for ${relativePath}`,
+            path: relativePath,
+            suggestion:
+              'Add typeHint via kmind capture, or raise signal in content; raw kept pending',
+          });
+          continue;
+        }
+        if (classified.confidence < minConfidence) {
           this.diagnostics.add({
             category: 'CLASSIFY_ERROR',
             severity: 'low',
-            message: `Low confidence (${classified.confidence}) for ${relativePath}`,
+            message: `Low confidence (${classified.confidence}) for ${relativePath} (manual bypass)`,
             path: relativePath,
-            suggestion: 'Review classification or provide manual type',
+            suggestion: 'Review classification or provide a clearer type',
           });
         }
 
@@ -151,7 +176,6 @@ class PipelineImpl implements CompilePipeline {
         const now = new Date();
         const id = nextKnowledgeId(now, this.seq++);
         const assetProject = candidate.projectHint ?? project;
-        const isManual = relativePath.includes('manual') || Boolean(candidate.typeHint);
         const asset = graph.build({
           id,
           title: candidate.title.slice(0, 200) || id,

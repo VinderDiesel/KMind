@@ -65,13 +65,17 @@ export const MCP_TOOLS: McpToolDef[] = [
   {
     name: 'kmind_capture',
     description:
-      'Manually capture a knowledge entry into the vault (write). Prefer after a confirmed decision.',
+      'Capture a confirmed knowledge entry (write). Search first to avoid duplicates. Prefer after a closed decision; always pass title + type + structured body (problem / decision / trade-offs / outcome).',
     effect: 'write',
     inputSchema: {
       type: 'object',
       properties: {
         content: { type: 'string' },
-        type: { type: 'string' },
+        type: {
+          type: 'string',
+          description:
+            'One of: problem_solution | best_practice | architecture_design | tool_usage | pitfall | code_snippet | process_spec',
+        },
         project: { type: 'string' },
         title: { type: 'string' },
       },

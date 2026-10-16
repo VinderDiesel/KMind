@@ -24,7 +24,7 @@ export async function cmdCompile(
     success(result, true);
   } else {
     process.stdout.write(
-      `Compiled: processed=${result.processed} created=${result.created} skipped=${result.skipped} failed=${result.failed.length} (${result.durationMs}ms)\n`,
+      `Compiled: processed=${result.processed} created=${result.created} skipped=${result.skipped} gated=${result.gated} failed=${result.failed.length} (${result.durationMs}ms)\n`,
     );
     if (result.failed.length) {
       for (const f of result.failed) {

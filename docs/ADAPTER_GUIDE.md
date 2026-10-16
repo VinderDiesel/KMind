@@ -24,3 +24,21 @@ Each adapter implements the `Adapter` interface from `@kmind/core`:
 | qoder | `@kmind/adapter-qoder` |
 | codex | `@kmind/adapter-codex` |
 | kiro | `@kmind/adapter-kiro` |
+
+## Agent Skills
+
+Bundled skills live in repo `skills/` (also shipped as `packages/cli/skills/`).
+
+| Command | Effect |
+|:---|:---|
+| `kmind adapters install <name>` | MCP + copy skills → `~/.<tool>/skills/` |
+| `kmind skills install --all` | Skills only, every supported terminal |
+| `kmind skills install <name> --project` | Skills → `./.<tool>/skills/` (git-shareable) |
+
+| Terminal | Global skills dir |
+|:---|:---|
+| cursor | `~/.cursor/skills` |
+| claude-code | `~/.claude/skills` |
+| codex | `~/.codex/skills` |
+| kiro | `~/.kiro/skills` |
+| qoder | `~/.qoder/skills` |

@@ -18,6 +18,7 @@ Canonical Zod schemas live in `packages/shared/src/schemas/`.
 ## Config
 
 - Vault path, embedding, capture, adapters, healthCheck
+- `capture.minConfidence` (default `0.6`): compile hard gate for non-manual raw
 
 ## SQLite
 

@@ -65,16 +65,26 @@ pnpm --filter @kmind/cli exec kmind --help
 # 或：node packages/cli/dist/index.js --help
 ```
 
-### 接入 AI 编程工具
+### 接入 AI 编程工具（MCP + Skills 一键装）
 
 ```bash
 pnpm kmind adapters list
-pnpm kmind adapters install claude-code
+
+# 写入该终端的 MCP，并把 kmind-capture 等 Skills 装到 ~/.…/skills（全局，任意项目可用）
 pnpm kmind adapters install cursor
+pnpm kmind adapters install claude-code
 pnpm kmind adapters install qoder
 pnpm kmind adapters install codex
 pnpm kmind adapters install kiro
+
+# 或一次装到所有已支持终端
+pnpm kmind skills install --all
+
+# 仅装到当前仓库（便于团队 git 共享）
+pnpm kmind skills install cursor --project
 ```
+
+装完后**重启对应 AI 终端**（Claude Code 可用 `/reload-skills`）。规范 Skills 源在仓库 `skills/`；也可用社区工具 `npx skills add <repo>` 发现同目录。
 
 ### 启动 MCP Server
 
@@ -104,6 +114,8 @@ pnpm kmind mcp-serve
 > 「搜索我之前关于 PostgreSQL 死锁的踩坑记录」  
 > 「把这次架构决策沉淀到 KMind」  
 > 「查找与 Redis 持久化相关的所有知识」
+
+写入约定：先 `search` 判重，再 `capture`（带 `title` + `type` + 结构化正文）。Adapter 扫到的低置信会话只会留在 `raw/`（compile 显示 `gated`），不会自动升成知识资产。Skills 见 `skills/kmind-capture/`（`adapters install` / `skills install` 会复制到各终端）。
 
 或用 CLI：
 

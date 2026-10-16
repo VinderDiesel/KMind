@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { AppContext } from '../context.js';
 import { success, fail } from '../exit.js';
 import { KMindError } from '@kmind/shared';
+import { installSkillsForAdapter } from './skills.js';
 
 /**
  * Absolute path to this CLI entry (`packages/cli/dist/index.js`).
@@ -52,11 +53,12 @@ export async function cmdAdaptersList(ctx: AppContext): Promise<void> {
 }
 
 /**
- * Install MCP config for a named adapter.
+ * Install MCP config (+ bundled Agent Skills) for a named adapter.
  */
 export async function cmdAdaptersInstall(
   ctx: AppContext,
   name: string,
+  options?: { skipSkills?: boolean },
 ): Promise<void> {
   const adapter = ctx.adapters.find((a) => a.name === name);
   if (!adapter) {
@@ -84,7 +86,31 @@ export async function cmdAdaptersInstall(
   }
   const merged = deepMerge(existing, content);
   await fs.writeFile(tpl.targetPath, JSON.stringify(merged, null, 2), 'utf8');
-  success({ installed: true, targetPath: tpl.targetPath, content }, ctx.json);
+
+  let skills: Awaited<ReturnType<typeof installSkillsForAdapter>> = [];
+  if (!options?.skipSkills) {
+    try {
+      skills = await installSkillsForAdapter(name);
+    } catch {
+      skills = [];
+    }
+  }
+
+  success(
+    {
+      installed: true,
+      targetPath: tpl.targetPath,
+      content,
+      skills,
+      hint:
+        skills.length > 0
+          ? 'MCP + skills installed. Restart the terminal (or /reload-skills).'
+          : 'MCP installed. Run `kmind skills install ' +
+            name +
+            '` to add Agent Skills.',
+    },
+    ctx.json,
+  );
 }
 
 function deepMerge(

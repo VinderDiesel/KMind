@@ -11,6 +11,7 @@ import { cmdExport } from './commands/export.js';
 import { cmdImport } from './commands/import.js';
 import { cmdMcpServe } from './commands/mcp-serve.js';
 import { cmdAdaptersInstall, cmdAdaptersList } from './commands/adapters.js';
+import { cmdSkillsInstall, cmdSkillsList } from './commands/skills.js';
 import { cmdHook } from './commands/hook.js';
 import { cmdReindex } from './commands/reindex.js';
 import { cmdUi } from './commands/ui.js';
@@ -217,9 +218,10 @@ adapters
 
 adapters
   .command('install')
-  .description('Install MCP config for an adapter')
+  .description('Install MCP config + Agent Skills for an adapter')
   .argument('<name>', 'Adapter name')
-  .action(async (name) => {
+  .option('--skip-skills', 'Only write MCP config', false)
+  .action(async (name, cmdOpts: { skipSkills?: boolean }) => {
     const opts = program.opts<{ json?: boolean; vault?: string }>();
     try {
       const ctx = await resolveContext({
@@ -227,7 +229,52 @@ adapters
         json: opts.json,
         allowMissing: true,
       });
-      await cmdAdaptersInstall(ctx, name);
+      await cmdAdaptersInstall(ctx, name, { skipSkills: cmdOpts.skipSkills });
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+const skills = program.command('skills').description('Install Agent Skills into AI terminals');
+
+skills
+  .command('list')
+  .description('List bundled skills and target paths')
+  .action(async () => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await resolveContext({
+        vault: opts.vault,
+        json: opts.json,
+        allowMissing: true,
+      });
+      await cmdSkillsList(ctx);
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+skills
+  .command('install')
+  .description('Copy bundled skills into a terminal (global by default)')
+  .argument('[name]', 'Terminal: cursor | claude-code | codex | kiro | qoder')
+  .option('--all', 'Install into every supported terminal', false)
+  .option('--project', 'Install into cwd project skills dir instead of ~/.…/skills', false)
+  .action(async (name: string | undefined, cmdOpts: { all?: boolean; project?: boolean }) => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await resolveContext({
+        vault: opts.vault,
+        json: opts.json,
+        allowMissing: true,
+      });
+      await cmdSkillsInstall(ctx, {
+        name,
+        all: cmdOpts.all,
+        project: cmdOpts.project,
+      });
       ctx.store.close();
     } catch (err) {
       fail(err, opts.json);

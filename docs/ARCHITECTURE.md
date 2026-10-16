@@ -18,7 +18,9 @@ CLI / MCP Server / UI HTTP → @kmind/core → Vault (~/.kmind)
 
 - `storage` — Vault, Markdown, SQLite, blob
 - `ontology` — load / validate / evolve
-- `compiler` — capture → classify → map → graph → embed → index
+- `compiler` — capture → classify → **confidence gate** → map → graph → embed → index
+  - Adapter raw below `capture.minConfidence` stays `pending` (`gated`, no asset)
+  - Manual / `typeHint` captures bypass the gate
 - `query` — fulltext / structured / graph / semantic / hybrid / ego
 - `health` — lint rules
 - `migration` — export / import

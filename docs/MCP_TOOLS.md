@@ -8,7 +8,7 @@ Effect levels: `read` | `write` | `sensitive`
 | `kmind_related` | read | Related assets by graph |
 | `kmind_status` | read | Vault health stats |
 | `kmind_ontology_describe` | read | Ontology class/relation info |
-| `kmind_capture` | write | Manually capture knowledge |
+| `kmind_capture` | write | Capture confirmed knowledge (search first; pass title + type) |
 | `kmind_graph_query` | sensitive | Cypher-like graph query |
 | `kmind_export` | sensitive | Export vault |
 
