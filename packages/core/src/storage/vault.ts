@@ -105,8 +105,18 @@ classes:
     description: Base knowledge asset
     properties:
       id: { type: string, required: true }
-      type: { type: enum, required: true, values: [problem_solution, best_practice, architecture_design, tool_usage, pitfall, code_snippet, process_spec] }
+      type: { type: enum, required: true, values: [problem, outcome, problem_solution, best_practice, architecture_design, tool_usage, pitfall, code_snippet, process_spec] }
       title: { type: string, required: true }
+  Problem:
+    parent: KnowledgeAsset
+    description: Open issue / symptom to track; resolution via solves + verifies edges
+    properties:
+      decision: { type: text, required: false }
+  Outcome:
+    parent: KnowledgeAsset
+    description: Implementation / verification result of a solution
+    properties:
+      decision: { type: text, required: true }
   ProblemSolution:
     parent: KnowledgeAsset
     properties:
@@ -139,9 +149,13 @@ classes:
     properties:
       name: { type: string, required: true }
 relations:
-  derives_from: { from: KnowledgeAsset, to: KnowledgeAsset }
-  supersedes: { from: KnowledgeAsset, to: KnowledgeAsset }
-  contradicts: { from: KnowledgeAsset, to: KnowledgeAsset }
-  related_to: { from: KnowledgeAsset, to: KnowledgeAsset, symmetric: true }
+  derives_from: { from: KnowledgeAsset, to: KnowledgeAsset, description: Derived from prior knowledge }
+  supersedes: { from: KnowledgeAsset, to: KnowledgeAsset, description: Replaces older asset }
+  contradicts: { from: KnowledgeAsset, to: KnowledgeAsset, description: Conflicts with }
+  related_to: { from: KnowledgeAsset, to: KnowledgeAsset, symmetric: true, description: Soft association }
   mentions: { from: KnowledgeAsset, to: Entity }
+  solves: { from: KnowledgeAsset, to: Problem, description: Solution addresses a Problem }
+  verifies: { from: Outcome, to: Problem, description: Outcome confirms problem resolution state }
+  results_in: { from: KnowledgeAsset, to: Outcome, description: Solution produced this Outcome }
+  part_of: { from: KnowledgeAsset, to: KnowledgeAsset, description: Detail card belongs to overview hub }
 `;

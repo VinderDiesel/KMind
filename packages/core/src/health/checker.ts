@@ -7,6 +7,9 @@ import { checkBrokenLinks } from './rules/broken-links.js';
 import { checkContradictions } from './rules/contradictions.js';
 import { checkOrphans } from './rules/orphans.js';
 import { checkOntologyDrift } from './rules/ontology-drift.js';
+import { checkMissingCodeAnchors } from './rules/missing-code-anchors.js';
+import { checkSessionPollution } from './rules/session-pollution.js';
+import { checkCoverageQuality } from './rules/coverage-lint.js';
 
 export interface HealthReport {
   issues: HealthIssue[];
@@ -34,6 +37,12 @@ export async function runHealthCheck(
     ...checkContradictions(relations),
     ...checkOrphans(assets, relations),
     ...checkOntologyDrift(assets, registry),
+    ...checkMissingCodeAnchors(
+      assets,
+      config.healthCheck.requireCodeAnchors ?? true,
+    ),
+    ...checkSessionPollution(assets),
+    ...checkCoverageQuality(assets),
   ];
 
   const checkedAt = new Date().toISOString();

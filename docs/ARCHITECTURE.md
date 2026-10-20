@@ -29,8 +29,9 @@ CLI / MCP Server / UI HTTP → @kmind/core → Vault (~/.kmind)
 
 - Package `@kmind/ui` (Vite + React + `react-force-graph-3d`) builds static assets.
 - CLI serves them on `127.0.0.1:7821` (override with `--port`) plus read-only `/api/*`.
-- Graph model: **ego neighborhood** with **hop shells** (default depth 2, node cap 150).
-- Health: vault summary + focus-scoped issues; problem nodes weakly highlighted in the graph.
+- Graph model: **ego neighborhood** (hop shells, default depth 2, node cap 150) **or vault-wide global graph** (node cap 300, prefer linked nodes).
+- Health: vault dashboard (rule chips + issue list) + focus-scoped issues; problem nodes weakly highlighted.
+- Code anchors: Focus panel lists `metadata.codeAnchors`; nodes with anchors get a cool secondary bloom (blast radius stays with Codegraph).
 - No write APIs; capture / compile / export remain CLI or MCP.
 
 ### Read-only API
@@ -38,7 +39,8 @@ CLI / MCP Server / UI HTTP → @kmind/core → Vault (~/.kmind)
 | Method | Path | Purpose |
 |:---|:---|:---|
 | GET | `/api/status` | Vault counters |
-| GET | `/api/health` | Full health report (`issueCount`，0=无告警) |
+| GET | `/api/health` | Full health report (`issueCount`；可选 `rule` / `severity`) |
+| GET | `/api/graph?cap=&project=&type=` | Vault-wide graph |
 | GET | `/api/assets?limit=` | List recent assets |
 | GET | `/api/search?q=` | Hybrid search |
 | GET | `/api/assets/:id` | Asset detail |

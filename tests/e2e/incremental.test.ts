@@ -10,6 +10,25 @@ import {
   createPipeline,
 } from '../../packages/core/src/index.js';
 
+const QUALITY_BODY = `
+## 实现方式
+1. 在 \`packages/core/src/compiler/pipeline.ts\` 的 \`createPipeline\` 增加 session 双闸门。
+2. 调用方执行 \`pnpm kmind compile\` 时跳过 \`sessions/\` raw。
+
+\`\`\`ts
+if (isSessionRaw && !allowSessions) return;
+\`\`\`
+
+## 注意事项
+- 仅跳过编译，不删除已有 Markdown；清理用 \`kmind purge-sessions\`。
+- 旧 vault 的 config.yaml 需显式写 compileSessions: false。
+
+## 红线规避
+- **禁止**再把整段 session JSONL 当知识资产编译入库。
+- **禁止**用总结性一句话代替实现步骤与配置键名。
+- 必须先 search 判重再 capture。
+`;
+
 describe('e2e incremental compile', () => {
   let dir: string;
 
@@ -33,7 +52,10 @@ describe('e2e incremental compile', () => {
       path.join(vault.rawDir, 'manual', 'a.jsonl'),
       `${JSON.stringify({
         role: 'user',
-        content: 'tool usage: kmind search',
+        title: 'path.join 禁止手写斜杠',
+        type: 'best_practice',
+        project: 'kmind',
+        content: QUALITY_BODY,
         timestamp: '2026-10-15T12:00:00.000Z',
       })}\n`,
     );

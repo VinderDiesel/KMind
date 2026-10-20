@@ -106,6 +106,62 @@ body {
   letter-spacing: 0.22em;
 }
 
+.mode-toggle {
+  pointer-events: auto;
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(8, 11, 16, 0.72);
+}
+
+.mode-toggle button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 500 0.68rem/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+}
+
+.mode-toggle button:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--cyan-dim);
+}
+
+.mode-toggle button.active {
+  color: var(--bg-0);
+  background: var(--cyan);
+}
+
+.mode-toggle button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.project-filter {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.project-filter select {
+  border: 1px solid var(--line);
+  background: rgba(8, 11, 16, 0.72);
+  color: var(--text);
+  border-radius: 2px;
+  padding: 0.45rem 0.5rem;
+  font: 500 0.72rem/1 var(--font-mono);
+  min-width: 7rem;
+}
+
 .search-shell {
   pointer-events: auto;
   flex: 1;
@@ -283,6 +339,21 @@ body {
   opacity: 0.9;
 }
 
+.shell-legend .code-anchor {
+  background: #8ab4f8;
+  color: #8ab4f8;
+}
+
+.shell-legend .problem {
+  background: #f0a060;
+  color: #f0a060;
+}
+
+.shell-legend .health {
+  background: #f07178;
+  color: #f07178;
+}
+
 .stage {
   position: absolute;
   inset: 0;
@@ -416,6 +487,45 @@ body {
   color: var(--cyan);
   font-size: 0.7rem;
   letter-spacing: 0.04em;
+}
+
+.anchor-list {
+  list-style: none;
+  margin: 0.45rem 0 0.25rem;
+  padding: 0;
+  max-height: 8.5rem;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+}
+
+.anchor-list li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.anchor-list code {
+  display: block;
+  color: #8ab4f8;
+  font-size: 0.65rem;
+  word-break: break-all;
+}
+
+.anchor-list span {
+  color: var(--muted);
+}
+
+.anchor-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.62rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.anchor-hint code {
+  color: #8ab4f8;
+  font-size: 0.6rem;
 }
 
 .subhead {
@@ -560,6 +670,51 @@ body {
 
 .issue-list .sev-high {
   color: var(--danger);
+}
+
+.issue-list .sev-med {
+  color: var(--amber);
+}
+
+.rule-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.45rem 0 0.2rem;
+}
+
+.rule-chips button {
+  border: 1px solid var(--line);
+  background: rgba(8, 11, 16, 0.55);
+  color: var(--muted);
+  font: 400 0.62rem/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  padding: 0.35rem 0.45rem;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.rule-chips button:hover {
+  color: var(--text);
+  border-color: rgba(79, 209, 197, 0.35);
+}
+
+.rule-chips button.active {
+  color: var(--cyan);
+  border-color: rgba(79, 209, 197, 0.55);
+  background: var(--cyan-dim);
+}
+
+.vault-health-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.vault-health-panel .issue-list {
+  flex: 1;
+  max-height: none;
 }
 
 .issue-list button {

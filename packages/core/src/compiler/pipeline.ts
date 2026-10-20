@@ -6,6 +6,10 @@ import { MarkdownStore } from '../storage/markdown-store.js';
 import type { SqliteStore } from '../storage/sqlite-store.js';
 import { CaptureStage } from './capture.js';
 import { HeuristicClassifier, type Classifier } from './classifier.js';
+import {
+  extractCodeAnchors,
+  withCodeAnchorsMetadata,
+} from './code-anchors.js';
 import { OntologyMapper } from './ontology-mapper.js';
 import { GraphBuilder, nextKnowledgeId } from './graph-builder.js';
 import { LocalEmbedder, type Embedder } from './embedder.js';
@@ -14,6 +18,21 @@ import type { OntologyEvolver } from '../ontology/ontology-evolver.js';
 import { DiagnosticCollector } from '../observability/diagnostic-collector.js';
 import { traceLifecycle } from '../observability/trace.js';
 import type { Adapter } from '../adapters/types.js';
+import { assessCaptureQuality } from './capture-quality.js';
+import { sanitizeTitle } from './title.js';
+
+/**
+ * Sessions become knowledge only with config.compileSessions AND
+ * env KMIND_COMPILE_SESSIONS=1. Accidental compile/hook must never pollute.
+ */
+export function isSessionCompileAllowed(compileSessions: boolean): boolean {
+  return compileSessions && process.env.KMIND_COMPILE_SESSIONS === '1';
+}
+
+function isSessionRawPath(relativePath: string): boolean {
+  const norm = relativePath.replace(/\\/g, '/');
+  return norm.startsWith('sessions/') || norm.includes('/sessions/');
+}
 
 export interface CompileOptions {
   incremental?: boolean;
@@ -103,10 +122,18 @@ class PipelineImpl implements CompilePipeline {
     const vaultConfig = await this.vault.getConfig();
     const minConfidence =
       options.minConfidence ?? vaultConfig.capture.minConfidence;
+    const sessionMinConfidence = vaultConfig.capture.sessionMinConfidence;
+    const compileSessions = vaultConfig.capture.compileSessions;
+    const autoCapture = vaultConfig.capture.autoCapture;
+    const requireQualityGate = vaultConfig.capture.requireQualityGate ?? true;
+    const requireProject = vaultConfig.capture.requireProject ?? true;
+    const allowSessions = isSessionCompileAllowed(compileSessions);
 
-    // Optional adapter capture
-    for (const adapter of this.deps.adapters ?? []) {
-      await capture.captureFromAdapter(adapter);
+    // Optional adapter capture into raw/ only (compile still gated below).
+    if (autoCapture) {
+      for (const adapter of this.deps.adapters ?? []) {
+        await capture.captureFromAdapter(adapter);
+      }
     }
 
     await this.deps.sqlite.setCompileState('capture');
@@ -116,6 +143,13 @@ class PipelineImpl implements CompilePipeline {
       result.processed += 1;
       const relativePath = path.relative(this.vault.rawDir, absPath);
       try {
+        const isSessionRaw = isSessionRawPath(relativePath);
+        // Root lock: sessions never become knowledge without double consent.
+        if (isSessionRaw && !allowSessions) {
+          result.skipped += 1;
+          continue;
+        }
+
         const content = await fs.readFile(absPath, 'utf8');
         const hash = blob.hash(content);
         const existing = await this.deps.sqlite.getRawHash(relativePath);
@@ -137,17 +171,19 @@ class PipelineImpl implements CompilePipeline {
         const classified = await classifier.classify(candidate);
         const isManual =
           relativePath.includes('manual') || Boolean(candidate.typeHint);
-        // Hard gate: keep low-confidence adapter raw in pending; manual/typeHint bypass.
-        if (!isManual && classified.confidence < minConfidence) {
+        const gate =
+          isSessionRaw && !isManual ? sessionMinConfidence : minConfidence;
+        // Hard gate: keep low-confidence adapter/session raw in pending.
+        if (!isManual && classified.confidence < gate) {
           result.gated += 1;
           await this.deps.sqlite.setRawHash(relativePath, hash, 'pending');
           this.diagnostics.add({
             category: 'CLASSIFY_ERROR',
             severity: 'medium',
-            message: `Gated: confidence ${classified.confidence.toFixed(2)} < ${minConfidence} for ${relativePath}`,
+            message: `Gated: confidence ${classified.confidence.toFixed(2)} < ${gate} for ${relativePath}`,
             path: relativePath,
             suggestion:
-              'Add typeHint via kmind capture, or raise signal in content; raw kept pending',
+              'Use kmind capture with title/type/project. Do not compile sessions.',
           });
           continue;
         }
@@ -159,6 +195,58 @@ class PipelineImpl implements CompilePipeline {
             path: relativePath,
             suggestion: 'Review classification or provide a clearer type',
           });
+        }
+
+        const cleanTitle = sanitizeTitle(candidate.title || path.basename(relativePath));
+        const assetProject = candidate.projectHint ?? project ?? 'global';
+
+        if (isManual && requireProject && (!assetProject || assetProject === 'global')) {
+          result.gated += 1;
+          await this.deps.sqlite.setRawHash(relativePath, hash, 'pending');
+          this.diagnostics.add({
+            category: 'CAPTURE_ERROR',
+            severity: 'high',
+            message: `Gated: project required (got "${assetProject}") for ${relativePath}`,
+            path: relativePath,
+            suggestion: 'Pass an explicit project (e.g. ccdp-ontology / meta-brain), not global',
+          });
+          continue;
+        }
+
+        if (isManual && requireQualityGate) {
+          const peers = await this.deps.sqlite.queryAssets({
+            project: assetProject,
+            limit: 200,
+          });
+          const hubIds = peers
+            .filter((a) => /总览|概览|索引|overview/i.test(a.title))
+            .map((a) => a.id);
+          const quality = assessCaptureQuality(
+            candidate.content,
+            classified.type,
+            {
+              title: cleanTitle,
+              related: candidate.relatedHint,
+              links: candidate.linksHint,
+              anchors: candidate.anchorsHint,
+              incremental: peers.length > 0,
+              hubIds,
+            },
+          );
+          if (!quality.ok) {
+            result.gated += 1;
+            await this.deps.sqlite.setRawHash(relativePath, hash, 'pending');
+            this.diagnostics.add({
+              category: 'CAPTURE_ERROR',
+              severity: 'high',
+              message: `Quality gate: ${quality.reasons.join('; ')}`,
+              path: relativePath,
+              suggestion:
+                quality.hints[0] ??
+                '增量写深：锚点+实现/注意/红线；related 挂总览；勿目录空文',
+            });
+            continue;
+          }
         }
 
         await this.deps.sqlite.setCompileState('ontology', relativePath);
@@ -174,17 +262,28 @@ class PipelineImpl implements CompilePipeline {
         }
 
         const now = new Date();
-        const id = nextKnowledgeId(now, this.seq++);
-        const assetProject = candidate.projectHint ?? project;
+        // Stable id: same raw path always updates the same asset (no ID churn).
+        const existingId =
+          existing?.assetId ??
+          (await this.deps.sqlite.findAssetIdByRawPath(relativePath));
+        const id = existingId ?? nextKnowledgeId(now, this.seq++);
+        const body = formatBody(candidate.content, mapped.context, {
+          preferRawBody: isManual,
+        });
+        // Structure citations only — never ingest explore dumps as body.
+        const anchors = extractCodeAnchors(body, candidate.anchorsHint);
         const asset = graph.build({
           id,
-          title: candidate.title.slice(0, 200) || id,
+          title: cleanTitle || id,
           project: assetProject,
-          body: formatBody(candidate.content, mapped.context, { preferRawBody: isManual }),
+          body,
           mapped,
           rawPath: relativePath,
           terminal: relativePath.includes('manual') ? 'manual' : 'claude-code',
           timestamp: now.toISOString(),
+          metadata: withCodeAnchorsMetadata({}, anchors),
+          related: candidate.relatedHint,
+          links: candidate.linksHint,
         });
 
         const validation = this.deps.registry.validate(asset);
@@ -223,9 +322,15 @@ class PipelineImpl implements CompilePipeline {
         }
 
         await this.deps.sqlite.setCompileState('index', relativePath);
-        await this.deps.sqlite.setRawHash(relativePath, hash, 'compiled');
+        await this.deps.sqlite.setRawHash(
+          relativePath,
+          hash,
+          'compiled',
+          asset.id,
+        );
         traceLifecycle(asset.id, 'index');
-        result.created += 1;
+        if (existingId) result.updated += 1;
+        else result.created += 1;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         result.failed.push({ path: relativePath, error: message });

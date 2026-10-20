@@ -15,6 +15,8 @@ import { cmdSkillsInstall, cmdSkillsList } from './commands/skills.js';
 import { cmdHook } from './commands/hook.js';
 import { cmdReindex } from './commands/reindex.js';
 import { cmdUi } from './commands/ui.js';
+import { cmdPurgeSessions } from './commands/purge-sessions.js';
+import { cmdCoverage } from './commands/coverage.js';
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 
@@ -92,11 +94,40 @@ program
   .option('--type <t>', 'Knowledge type')
   .option('--title <title>', 'Title')
   .option('--project <name>', 'Project')
+  .option(
+    '--anchors <json>',
+    'Code anchors JSON array, e.g. \'[{"file":"a.ts","symbol":"foo"}]\'',
+  )
+  .option(
+    '--related <ids>',
+    'Comma-separated related asset ids (k-YYYY-MM-DD-NNN)',
+  )
+  .option(
+    '--links <json>',
+    'Typed links JSON, e.g. \'[{"id":"k-…-001","relation":"solves"}]\'',
+  )
   .action(async (content, cmdOpts) => {
     const opts = program.opts<{ json?: boolean; vault?: string }>();
     try {
       const ctx = await withVaultOrPrompt(opts);
       await cmdCapture(ctx, content, cmdOpts);
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+program
+  .command('purge-sessions')
+  .description(
+    'Remove session-derived knowledge assets (keep manual captures and raw/)',
+  )
+  .option('--dry-run', 'Report matches without deleting', false)
+  .action(async (cmdOpts) => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await withVaultOrPrompt(opts);
+      await cmdPurgeSessions(ctx, { dryRun: Boolean(cmdOpts.dryRun) });
       ctx.store.close();
     } catch (err) {
       fail(err, opts.json);
@@ -118,10 +149,36 @@ program
   });
 
 program
+  .command('coverage')
+  .description(
+    'Assess whether a project/topic is dug deep (not catalog-only). Do not claim complete unless complete=true',
+  )
+  .requiredOption('--project <name>', 'Project scope')
+  .option('--topic <t>', 'Topic filter (e.g. 问数)')
+  .option('--hub-id <id>', 'Overview asset id to score')
+  .action(async (cmdOpts) => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await withVaultOrPrompt(opts);
+      await cmdCoverage(ctx, {
+        project: cmdOpts.project,
+        topic: cmdOpts.topic,
+        hubId: cmdOpts.hubId,
+      });
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+program
   .command('export')
   .description('Export vault')
   .requiredOption('--output <path>', 'Output path')
   .option('--format <fmt>', 'tar.gz or git', 'tar.gz')
+  .option('--project <names...>', 'Filter by project (repeatable / comma)')
+  .option('--type <types...>', 'Filter by knowledge type')
+  .option('--init-git', 'When format=git, run git init + initial commit', false)
   .action(async (cmdOpts) => {
     const opts = program.opts<{ json?: boolean; vault?: string }>();
     try {
@@ -135,14 +192,23 @@ program
 
 program
   .command('import')
-  .description('Import vault from tar.gz')
-  .requiredOption('--input <path>', 'Input archive')
+  .description('Import vault from tar.gz or git directory')
+  .requiredOption('--input <path>', 'Input archive or directory')
+  .option('--format <fmt>', 'tar.gz or git (auto-detect by extension)', '')
   .option('--merge', 'Merge with existing', false)
+  .option(
+    '--conflict <policy>',
+    'On id conflict when merging: skip | overwrite | rename',
+    'skip',
+  )
   .action(async (cmdOpts) => {
     const opts = program.opts<{ json?: boolean; vault?: string }>();
     try {
       const ctx = await withVaultOrPrompt(opts);
-      await cmdImport(ctx, cmdOpts);
+      await cmdImport(ctx, {
+        ...cmdOpts,
+        format: cmdOpts.format || undefined,
+      });
       ctx.store.close();
     } catch (err) {
       fail(err, opts.json);
@@ -151,13 +217,32 @@ program
 
 program
   .command('mcp-serve')
-  .description('Start MCP server over stdio')
-  .action(async () => {
-    const opts = program.opts<{ vault?: string }>();
+  .description(
+    'Start MCP server (stdio for IDE; --daemon for background HTTP)',
+  )
+  .option('--stdio', 'Force stdio transport (foreground)', false)
+  .option('--http', 'Streamable HTTP transport (foreground)', false)
+  .option('--daemon', 'Background HTTP MCP (writes pid under ~/.kmind/run)', false)
+  .option('--stop', 'Stop background HTTP MCP daemon', false)
+  .option('--status', 'Show background HTTP MCP daemon status', false)
+  .option('--host <host>', 'HTTP bind host', '127.0.0.1')
+  .option('--port <n>', 'HTTP port (default 7822)', String(7822))
+  .action(async (cmdOpts) => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
     try {
-      await cmdMcpServe(opts.vault);
+      await cmdMcpServe({
+        vault: opts.vault,
+        json: opts.json,
+        stdio: Boolean(cmdOpts.stdio),
+        http: Boolean(cmdOpts.http),
+        daemon: Boolean(cmdOpts.daemon),
+        stop: Boolean(cmdOpts.stop),
+        status: Boolean(cmdOpts.status),
+        host: cmdOpts.host,
+        port: Number(cmdOpts.port),
+      });
     } catch (err) {
-      fail(err, false);
+      fail(err, opts.json ?? false);
     }
   });
 

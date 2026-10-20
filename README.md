@@ -53,46 +53,69 @@ git clone https://github.com/VinderDiesel/KMind.git
 cd KMind
 pnpm install
 pnpm build
-
-# 初始化本地知识库（默认 ~/.kmind）
-pnpm kmind init
 ```
 
-后续可用 `pnpm kmind <command>`，或把 CLI 链入 PATH：
+`pnpm build`（以及已有 `dist` 时的 `pnpm install`）会自动把 CLI 链到全局：
+
+- 符号链接：`~/.local/bin/kmind` → `packages/cli/dist/index.js`
+- 并尽量执行 `pnpm link --global`（`@kmind/cli`）
+
+之后可在**任意目录**直接使用：
 
 ```bash
-pnpm --filter @kmind/cli exec kmind --help
-# 或：node packages/cli/dist/index.js --help
+kmind --help
+kmind init          # 默认 Vault：~/.kmind
 ```
+
+若提示找不到命令，把 `~/.local/bin` 加入 PATH（zsh 示例）：
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+```
+
+仓库内仍可用：`pnpm kmind <command>` 或 `pnpm link:cli` 手动重链。
 
 ### 接入 AI 编程工具（MCP + Skills 一键装）
 
 ```bash
-pnpm kmind adapters list
+kmind adapters list
 
 # 写入该终端的 MCP，并把 kmind-capture 等 Skills 装到 ~/.…/skills（全局，任意项目可用）
-pnpm kmind adapters install cursor
-pnpm kmind adapters install claude-code
-pnpm kmind adapters install qoder
-pnpm kmind adapters install codex
-pnpm kmind adapters install kiro
+kmind adapters install cursor
+kmind adapters install claude-code
+kmind adapters install qoder
+kmind adapters install codex
+kmind adapters install kiro
 
 # 或一次装到所有已支持终端
-pnpm kmind skills install --all
+kmind skills install --all
 
 # 仅装到当前仓库（便于团队 git 共享）
-pnpm kmind skills install cursor --project
+kmind skills install cursor --project
 ```
 
 装完后**重启对应 AI 终端**（Claude Code 可用 `/reload-skills`）。规范 Skills 源在仓库 `skills/`；也可用社区工具 `npx skills add <repo>` 发现同目录。
 
 ### 启动 MCP Server
 
+**日常用法**：`adapters install` 后由 Cursor / Claude Code **自动按需拉起** stdio MCP，一般不必手动常驻。
+
+手动后台（HTTP，本机调试 / 多客户端探测）：
+
 ```bash
-pnpm kmind mcp-serve
+kmind mcp-serve --daemon          # 后台 → http://127.0.0.1:7822/mcp
+kmind mcp-serve --status
+kmind mcp-serve --stop
 ```
 
-在 AI 工具的 MCP 配置中添加（按本机路径调整）：
+前台调试：
+
+```bash
+kmind mcp-serve --http            # HTTP 前台
+kmind mcp-serve --stdio           # 强制 stdio 前台（管道场景）
+```
+
+在 AI 工具的 MCP 配置中添加（按本机路径调整；stdio，由客户端拉起）：
 
 ```json
 {
@@ -115,14 +138,23 @@ pnpm kmind mcp-serve
 > 「把这次架构决策沉淀到 KMind」  
 > 「查找与 Redis 持久化相关的所有知识」
 
-写入约定：先 `search` 判重，再 `capture`（带 `title` + `type` + 结构化正文）。Adapter 扫到的低置信会话只会留在 `raw/`（compile 显示 `gated`），不会自动升成知识资产。Skills 见 `skills/kmind-capture/`（`adapters install` / `skills install` 会复制到各终端）。
+**根因防线（写不进库，而不是事后洗库）：**
+
+1. **Session 双闸门**：`compileSessions=false` 且未设 `KMIND_COMPILE_SESSIONS=1` 时，`raw/sessions/` **永不**升知识  
+2. **管线质量闸**：明细 + 一卡一事 + 禁止 `project=global`；架构/流程须**代码锚点**  
+3. **增量默认挂图**：project 已有资产时，capture 必须 `related`/`links` 接到总览或邻卡（用户不必再说「写详细/挂关系」）  
+4. **标题 sanitize** + lint `session_pollution`  
+
+写入约定见 Skill `kmind-capture`（首次四阶段 / 增量五步，深度为默认）。Skills：`kmind-capture`、`kmind-code-bridge`。
 
 或用 CLI：
 
 ```bash
-pnpm kmind capture "PostgreSQL advisory lock 死锁，改用 Redis 解决" --type pitfall --title "advisory lock 死锁"
-pnpm kmind search "PostgreSQL 死锁"
-pnpm kmind lint
+kmind capture "PostgreSQL advisory lock 死锁，改用 Redis 解决" --type pitfall --title "advisory lock 死锁"
+kmind capture "后续 ADR" --type architecture_design --title "ADR 002" --related k-2026-10-19-001
+kmind search "k-2026-10-19-001"   # 精确 id
+kmind purge-sessions --dry-run    # 清理 session 噪声前先预览
+kmind lint
 ```
 
 ---
@@ -184,12 +216,14 @@ pnpm kmind lint
 | `kmind init` | 初始化 Vault |
 | `kmind compile` | 将 raw 会话编译为知识资产 |
 | `kmind search <query>` | 混合检索 |
-| `kmind capture <content>` | 手动捕获知识 |
-| `kmind lint` | 健康检查 |
-| `kmind export --output <path>` | 导出 Vault（`tar.gz` / `git`） |
-| `kmind import --input <path>` | 从归档导入 |
+| `kmind capture <content>` | 手动捕获知识（`--related` / `--anchors`） |
+| `kmind purge-sessions` | 删除 session 编译出的资产（保留 manual + raw） |
+| `kmind lint` | 健康检查（含 coverage 浅卡/重复总览） |
+| `kmind coverage --project <p>` | 覆盖率验收（`--topic` / `--hub-id`）；`complete=false` 禁止宣称已完整 |
+| `kmind export --output <path>` | 导出 Vault（`tar.gz` / `git`；`--project` / `--type`；`--init-git`） |
+| `kmind import --input <path>` | 导入（`--merge` + `--conflict skip\|overwrite\|rename`；git 目录或 tar.gz） |
 | `kmind reindex` | 从 Markdown 重建 SQLite 索引 |
-| `kmind mcp-serve` | 启动 MCP Server（stdio） |
+| `kmind mcp-serve` | MCP：IDE 用 stdio；`--daemon` 后台 HTTP |
 | `kmind ui` | 打开本地只读知识 UI（`127.0.0.1:7821`） |
 | `kmind adapters list` | 列出适配器 |
 | `kmind adapters install <name>` | 为指定终端写入 MCP 配置 |
@@ -199,19 +233,21 @@ pnpm kmind lint
 
 ```bash
 pnpm build
-pnpm kmind ui
-# 或指定焦点：pnpm kmind ui --focus k-2026-01-01-001
+kmind ui
+# 或指定焦点：kmind ui --focus k-2026-01-01-001
 ```
 
-浏览器打开后先搜索资产，进入 **3D ego 邻域**（默认 hop=2，节点上限 150）；右侧 HUD 展示与焦点相关的健康告警。仅绑定 `127.0.0.1`，API 只读。
+浏览器打开后可切换 **Ego / Global**：Ego 为 3D 邻域（默认 hop=2，节点上限 150）；Global 为全库图谱（默认上限 300，可按 project 过滤）。右侧 HUD 含全库健康仪表盘（按规则筛选、点击告警进入焦点）与焦点邻域健康。`problem` 节点弱高亮。仅绑定 `127.0.0.1`，API 只读。
 
 ---
 
-## 七类知识资产
+## 知识资产类型（9 类）
 
 | 资产类型 | 触发沉淀的时机 | 示例 |
 |:---|:---|:---|
-| **问题解决方案** | 解决棘手问题后 | PostgreSQL advisory lock 死锁，改用 Redis |
+| **问题** `problem` | 可跟踪的未解问题（症状/复现/验收） | JOIN 路径丢失导致 NO_JOIN_PATH |
+| **实施结果** `outcome` | 方案落地后的验证证据 | 样例4 AskTrace 已通过 |
+| **问题解决方案** `problem_solution` | 针对 problem 的可执行方案（`links.solves`） | 改投影策略避免维值钉死 |
 | **最佳实践** | 形成可复用约定后 | 异步任务必须设置超时与重试上限 |
 | **架构设计** | 完成架构决策后 | 选择事件驱动而非请求-响应的理由 |
 | **工具使用** | 工具配置/技巧沉淀后 | `.cursorrules` 中显式声明测试命令 |
@@ -219,7 +255,7 @@ pnpm kmind ui
 | **代码片段** | 可复用实现出现后 | 带指数退避的重试装饰器 |
 | **流程规范** | 团队流程固化后 | 提交前必须 lint + typecheck + 单测 |
 
-每条资产可包含完整决策轨迹：问题 → 备选方案 → 决策 → 理由 → 权衡 → 结果。
+问题闭环：`solution -[:solves]-> problem`，`outcome -[:verifies]-> problem`；用 `kmind_problem_status` 看 open / addressed / verified。
 
 ---
 
@@ -227,13 +263,17 @@ pnpm kmind ui
 
 | 工具 | 效果级别 | 说明 |
 |:---|:---|:---|
-| `kmind_search` | read | 混合检索知识库 |
+| `kmind_search` | read | 混合检索（传资产 id 则精确命中；manual 加权） |
+| `kmind_get` | read | 按精确 id 取回单条资产 |
 | `kmind_related` | read | 按图谱查找关联知识 |
 | `kmind_status` | read | Vault 健康状态 |
 | `kmind_ontology_describe` | read | 描述本体结构 |
-| `kmind_capture` | write | 手动捕获知识 |
+| `kmind_capture` | write | 手动捕获（明细闸门；总览子卡过浅拒写；回执含 `coverage`） |
+| `kmind_coverage` | read | 深度 vs 目录：整理某系统后必须验收，search 命中 ≠ 完整 |
+| `kmind_problem_status` | read | 问题是否已解决（solves + verifies） |
 | `kmind_graph_query` | sensitive | 类 Cypher 图谱查询 |
 | `kmind_export` | sensitive | 导出知识库 |
+| `kmind_import` | sensitive | 导入知识库（merge + 冲突策略） |
 
 详见 [docs/MCP_TOOLS.md](docs/MCP_TOOLS.md)。
 
@@ -258,8 +298,8 @@ pnpm kmind ui
 迁移：
 
 ```bash
-pnpm kmind export --output backup.tar.gz
-pnpm kmind import --input backup.tar.gz
+kmind export --output backup.tar.gz
+kmind import --input backup.tar.gz
 ```
 
 ---
@@ -325,24 +365,6 @@ pnpm typecheck
 - [x] M1：核心引擎（存储 + 本体 + 图谱 + MCP Server）
 - [x] M2：首个适配器（Claude Code）+ 自动捕获 + 七类分类
 - [x] M3：多终端适配器（Cursor / Qoder / Codex / Kiro）+ Registry
-- [ ] M4：导出/导入增强 + Git 集成 + 多实例联邦
-- [ ] M5：知识健康可视化 + 图谱可视化 + v1.0 发布（进行中：`kmind ui` 本地 3D ego + 健康 HUD）
-
----
-
-## 贡献
-
-欢迎 Issue、Discussion 与 PR。提交前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，并确保 `pnpm test && pnpm typecheck` 通过。
-
-- Bug：[Issues](https://github.com/VinderDiesel/KMind/issues)
-- 讨论：[Discussions](https://github.com/VinderDiesel/KMind/discussions)
-
----
-
-## 许可证
-
-[Apache-2.0](LICENSE)
-
----
-
-如果 KMind 对你有帮助，欢迎点一个 Star，让更多开发者告别知识黑洞。
+- [x] M4：导出/导入增强 + Git 集成（联邦另开）
+- [ ] M4b：多实例联邦
+- [x] M5：知识健康可视化 + 图谱可视化（`kmind ui`：3D ego / global + 健康仪表盘；v1.0 另议）

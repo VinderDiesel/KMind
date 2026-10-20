@@ -37,6 +37,12 @@ export class SqliteStore {
     const schemaPath = resolveSchemaPath();
     const sql = readFileSync(schemaPath, 'utf8');
     this.db.exec(sql);
+    // Additive column for existing vaults created before asset_id existed.
+    try {
+      this.db.exec('ALTER TABLE raw_hashes ADD COLUMN asset_id TEXT');
+    } catch {
+      /* column already present */
+    }
   }
 
   /** Upsert a knowledge asset and refresh FTS. */
@@ -62,6 +68,11 @@ export class SqliteStore {
         updated_at=datetime('now')`,
     );
 
+    const metadataWithLinks = {
+      ...asset.metadata,
+      ...(asset.links?.length ? { links: asset.links } : {}),
+    };
+
     this.withTransaction(() => {
       upsert.run(
         asset.id,
@@ -80,7 +91,7 @@ export class SqliteStore {
         JSON.stringify(asset.context),
         JSON.stringify(asset.tags),
         JSON.stringify(asset.related),
-        JSON.stringify(asset.metadata),
+        JSON.stringify(metadataWithLinks),
       );
 
       this.db.prepare('DELETE FROM knowledge_fts WHERE id = ?').run(asset.id);
@@ -90,15 +101,58 @@ export class SqliteStore {
         )
         .run(asset.id, asset.title, asset.body, asset.tags.join(' '));
 
+      // Replace outbound edges owned by this asset (related + typed links).
+      this.db.prepare('DELETE FROM relations WHERE from_id = ?').run(asset.id);
+      const edgeStmt = this.db.prepare(
+        `INSERT OR IGNORE INTO relations (from_id, to_id, relation_type)
+         VALUES (?, ?, ?)`,
+      );
       for (const relatedId of asset.related) {
-        this.db
-          .prepare(
-            `INSERT OR IGNORE INTO relations (from_id, to_id, relation_type)
-             VALUES (?, ?, 'related_to')`,
-          )
-          .run(asset.id, relatedId);
+        edgeStmt.run(asset.id, relatedId, 'related_to');
+      }
+      const links =
+        asset.links?.length > 0
+          ? asset.links
+          : Array.isArray(asset.metadata?.links)
+            ? (asset.metadata.links as Array<{ id: string; relation: string }>)
+            : [];
+      for (const link of links) {
+        if (!link?.id || !link.relation) continue;
+        if (link.relation === 'related_to') {
+          edgeStmt.run(asset.id, link.id, 'related_to');
+          continue;
+        }
+        edgeStmt.run(asset.id, link.id, link.relation);
       }
     });
+  }
+
+  /**
+   * Inbound edges to a target id, optionally filtered by relation type.
+   */
+  async getInboundRelations(
+    toId: string,
+    relationType?: string,
+  ): Promise<Array<{ fromId: string; relationType: string }>> {
+    const rows = relationType
+      ? (this.db
+          .prepare(
+            `SELECT from_id, relation_type FROM relations
+             WHERE to_id = ? AND relation_type = ?`,
+          )
+          .all(toId, relationType) as Array<{
+          from_id: string;
+          relation_type: string;
+        }>)
+      : (this.db
+          .prepare(
+            `SELECT from_id, relation_type FROM relations WHERE to_id = ?`,
+          )
+          .all(toId) as Array<{ from_id: string; relation_type: string }>);
+    return rows.map((r) => ({
+      fromId: r.from_id,
+      relationType: r.relation_type,
+    }));
   }
 
   async deleteAsset(id: string): Promise<void> {
@@ -268,22 +322,48 @@ export class SqliteStore {
     pathKey: string,
     hash: string,
     status: 'pending' | 'compiled' | 'failed',
+    assetId?: string,
   ): Promise<void> {
     this.db
       .prepare(
-        `INSERT INTO raw_hashes (path, hash, compiled_at, status) VALUES (?, ?, datetime('now'), ?)
-         ON CONFLICT(path) DO UPDATE SET hash=excluded.hash, compiled_at=excluded.compiled_at, status=excluded.status`,
+        `INSERT INTO raw_hashes (path, hash, compiled_at, status, asset_id)
+         VALUES (?, ?, datetime('now'), ?, ?)
+         ON CONFLICT(path) DO UPDATE SET
+           hash=excluded.hash,
+           compiled_at=excluded.compiled_at,
+           status=excluded.status,
+           asset_id=COALESCE(excluded.asset_id, raw_hashes.asset_id)`,
       )
-      .run(pathKey, hash, status);
+      .run(pathKey, hash, status, assetId ?? null);
   }
 
   async getRawHash(
     pathKey: string,
-  ): Promise<{ hash: string; status: string } | null> {
+  ): Promise<{ hash: string; status: string; assetId: string | null } | null> {
     const row = this.db
-      .prepare('SELECT hash, status FROM raw_hashes WHERE path = ?')
-      .get(pathKey) as { hash: string; status: string } | undefined;
-    return row ?? null;
+      .prepare('SELECT hash, status, asset_id FROM raw_hashes WHERE path = ?')
+      .get(pathKey) as
+      | { hash: string; status: string; asset_id: string | null }
+      | undefined;
+    return row
+      ? { hash: row.hash, status: row.status, assetId: row.asset_id }
+      : null;
+  }
+
+  /**
+   * Find asset id previously compiled from a raw path (stable recompile).
+   */
+  async findAssetIdByRawPath(rawPath: string): Promise<string | null> {
+    const fromHash = this.db
+      .prepare('SELECT asset_id FROM raw_hashes WHERE path = ?')
+      .get(rawPath) as { asset_id: string | null } | undefined;
+    if (fromHash?.asset_id) return fromHash.asset_id;
+    const fromAsset = this.db
+      .prepare(
+        'SELECT id FROM knowledge_assets WHERE source_raw_path = ? LIMIT 1',
+      )
+      .get(rawPath) as { id: string } | undefined;
+    return fromAsset?.id ?? null;
   }
 
   async setCompileState(phase: string, rawPath?: string): Promise<void> {
@@ -375,6 +455,15 @@ function rowToAsset(row: Record<string, unknown>): KnowledgeAsset {
     context: JSON.parse(String(row.context_json || '{}')),
     tags: JSON.parse(String(row.tags_json || '[]')),
     related: JSON.parse(String(row.related_json || '[]')),
+    links: (() => {
+      const meta = JSON.parse(String(row.metadata || '{}')) as Record<
+        string,
+        unknown
+      >;
+      return Array.isArray(meta.links)
+        ? (meta.links as KnowledgeAsset['links'])
+        : [];
+    })(),
     body: String(row.body),
     metadata: JSON.parse(String(row.metadata || '{}')),
   };

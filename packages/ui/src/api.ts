@@ -16,6 +16,26 @@ export interface EgoNode {
   status: string;
   ontologyClass: string;
   hasHealthIssue: boolean;
+  hasCodeAnchors?: boolean;
+  codeAnchorCount?: number;
+}
+
+export interface CodeAnchor {
+  file: string;
+  symbol?: string;
+  kind?: string;
+  line?: number;
+  projectPath?: string;
+  confidence?: number;
+}
+
+export interface AssetDetail {
+  id: string;
+  title: string;
+  type: string;
+  project: string;
+  body?: string;
+  metadata?: { codeAnchors?: CodeAnchor[]; [k: string]: unknown };
 }
 
 export interface EgoLink {
@@ -25,11 +45,14 @@ export interface EgoLink {
 }
 
 export interface EgoGraph {
-  focusId: string;
-  depth: number;
+  focusId?: string;
+  mode?: 'global' | 'ego';
+  depth?: number;
   nodeCap: number;
   truncated: boolean;
   totalCandidates: number;
+  project?: string;
+  types?: string[];
   nodes: EgoNode[];
   links: EgoLink[];
 }
@@ -44,6 +67,7 @@ export interface HealthIssue {
 export interface HealthSummary {
   checkedAt: string;
   issueCount: number;
+  totalIssueCount?: number;
   byRule: Record<string, number>;
   issues: HealthIssue[];
 }
@@ -85,6 +109,20 @@ export function fetchEgo(
   );
 }
 
+/** Fetch vault-wide graph. */
+export function fetchGlobalGraph(options?: {
+  cap?: number;
+  project?: string;
+  type?: string;
+}): Promise<EgoGraph> {
+  const params = new URLSearchParams();
+  if (options?.cap != null) params.set('cap', String(options.cap));
+  if (options?.project) params.set('project', options.project);
+  if (options?.type) params.set('type', options.type);
+  const qs = params.toString();
+  return getJson(`/api/graph${qs ? `?${qs}` : ''}`);
+}
+
 /** Fetch ego-scoped health issues. */
 export function fetchEgoHealth(
   id: string,
@@ -95,9 +133,16 @@ export function fetchEgoHealth(
   );
 }
 
-/** Vault-wide health summary. */
-export function fetchHealth(): Promise<HealthSummary> {
-  return getJson('/api/health');
+/** Vault-wide health summary (optional rule / severity filter). */
+export function fetchHealth(options?: {
+  rule?: string;
+  severity?: string;
+}): Promise<HealthSummary> {
+  const params = new URLSearchParams();
+  if (options?.rule) params.set('rule', options.rule);
+  if (options?.severity) params.set('severity', options.severity);
+  const qs = params.toString();
+  return getJson(`/api/health${qs ? `?${qs}` : ''}`);
 }
 
 /** Vault status. */
@@ -106,6 +151,6 @@ export function fetchStatus(): Promise<VaultStatus> {
 }
 
 /** Asset detail. */
-export function fetchAsset(id: string): Promise<Record<string, unknown>> {
+export function fetchAsset(id: string): Promise<AssetDetail> {
   return getJson(`/api/assets/${encodeURIComponent(id)}`);
 }

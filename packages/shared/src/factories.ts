@@ -1,4 +1,5 @@
 import type {
+  AssetLink,
   KnowledgeAsset,
   KnowledgeType,
   Terminal,
@@ -13,6 +14,8 @@ export interface KnowledgeAssetFactoryOptions {
   terminal?: Terminal;
   body?: string;
   tags?: string[];
+  related?: string[];
+  links?: AssetLink[];
 }
 
 let idCounter = 1;
@@ -51,10 +54,11 @@ export function createKnowledgeAsset(
       tradeOffs: [],
     },
     tags: options.tags ?? [type],
-    related: [],
+    related: options.related ?? [],
+    links: options.links ?? [],
     body: options.body ?? `## Background\n\nTest body for ${type}.`,
     ontologyClass: typeToClass(type),
-    metadata: {},
+    metadata: options.links?.length ? { links: options.links } : {},
   };
 }
 
@@ -97,6 +101,8 @@ export function resetFactoryCounters(): void {
 
 function typeToClass(type: KnowledgeType): string {
   const map: Record<KnowledgeType, string> = {
+    problem: 'Problem',
+    outcome: 'Outcome',
     problem_solution: 'ProblemSolution',
     best_practice: 'BestPractice',
     architecture_design: 'ArchitectureDesign',

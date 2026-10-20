@@ -1,4 +1,4 @@
-import type { KnowledgeAsset } from '@kmind/shared';
+import type { AssetLink, KnowledgeAsset } from '@kmind/shared';
 import type { MappedKnowledge } from './ontology-mapper.js';
 import type { SqliteStore } from '../storage/sqlite-store.js';
 
@@ -11,6 +11,9 @@ export interface GraphBuildInput {
   rawPath: string;
   terminal: KnowledgeAsset['source']['terminal'];
   timestamp: string;
+  metadata?: Record<string, unknown>;
+  related?: string[];
+  links?: AssetLink[];
 }
 
 /**
@@ -36,10 +39,14 @@ export class GraphBuilder {
       },
       context: input.mapped.context,
       tags: input.mapped.tags,
-      related: [],
+      related: input.related ?? [],
+      links: input.links ?? [],
       body: input.body,
       ontologyClass: input.mapped.ontologyClass,
-      metadata: {},
+      metadata: {
+        ...(input.metadata ?? {}),
+        ...(input.links?.length ? { links: input.links } : {}),
+      },
     };
   }
 

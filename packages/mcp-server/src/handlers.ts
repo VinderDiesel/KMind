@@ -9,9 +9,21 @@ import {
   OntologyRegistry,
   loadOntology,
   Exporter,
+  Importer,
   AuditLogger,
+  sanitizeTitle,
+  assessCaptureQuality,
+  assessProjectCoverage,
+  assessOverviewChildrenDepth,
+  isOverviewTitle,
+  type ExportFilter,
+  type ImportConflictPolicy,
 } from '@kmind/core';
-import { KnowledgeTypeEnum } from '@kmind/shared';
+import {
+  AssetLinkSchema,
+  KnowledgeTypeEnum,
+  type KnowledgeType,
+} from '@kmind/shared';
 import { MCP_TOOLS, type ToolEffect } from './tools.js';
 import { LruTtlCache } from './cache.js';
 
@@ -103,6 +115,46 @@ async function dispatch(
       cache.set(key, payload);
       return payload;
     }
+    case 'kmind_get': {
+      const id = String(args.id ?? '');
+      const asset = await ctx.engine.getById(id);
+      if (!asset) return { error: 'not_found', id };
+      return {
+        id: asset.id,
+        title: asset.title,
+        type: asset.type,
+        project: asset.project,
+        status: asset.status,
+        confidence: asset.confidence,
+        tags: asset.tags,
+        related: asset.related,
+        links: asset.links,
+        source: asset.source,
+        metadata: asset.metadata,
+        body: asset.body,
+      };
+    }
+    case 'kmind_problem_status': {
+      return ctx.engine.problemStatus(String(args.id ?? ''));
+    }
+    case 'kmind_coverage': {
+      const project = String(args.project ?? '').trim();
+      if (!project || project === 'global') {
+        return {
+          error: 'project_required',
+          suggestion: '传明确 project（禁止缺省/global）',
+        };
+      }
+      const topic =
+        typeof args.topic === 'string' && args.topic.trim()
+          ? args.topic.trim()
+          : undefined;
+      const hubId =
+        typeof args.hubId === 'string' && args.hubId.trim()
+          ? args.hubId.trim()
+          : undefined;
+      return ctx.engine.coverage({ project, topic, hubId });
+    }
     case 'kmind_related': {
       const id = String(args.id);
       const depth = Number(args.depth ?? 1);
@@ -130,13 +182,81 @@ async function dispatch(
     }
     case 'kmind_capture': {
       const content = String(args.content);
-      const title = String(args.title ?? content.split('\n')[0] ?? 'untitled')
-        .replace(/^#\s*/, '')
-        .trim()
-        .slice(0, 200);
-      const project = String(args.project ?? 'global');
+      const title = sanitizeTitle(
+        String(args.title ?? content.split('\n')[0] ?? 'untitled'),
+      );
+      const project = String(args.project ?? '').trim();
+      if (!project || project === 'global') {
+        return {
+          captured: false,
+          error: 'quality_gate',
+          reasons: ['必须传明确 project（禁止缺省/global），以便按项目检索'],
+          suggestion: '例如 project: "ccdp-ontology" 或 "meta-brain"',
+        };
+      }
       const typeParse = KnowledgeTypeEnum.safeParse(args.type ?? 'best_practice');
       const type = typeParse.success ? typeParse.data : 'best_practice';
+      const anchors = Array.isArray(args.anchors) ? args.anchors : undefined;
+      const related = Array.isArray(args.related)
+        ? args.related.filter((x): x is string => typeof x === 'string')
+        : undefined;
+      const links = Array.isArray(args.links)
+        ? args.links
+            .map((item) => AssetLinkSchema.safeParse(item))
+            .filter((r) => r.success)
+            .map((r) => r.data)
+        : undefined;
+      // Incremental default: if project already has assets, force graph attach + depth.
+      const peers = await ctx.store.queryAssets({ project, limit: 200 });
+      const hubIds = peers
+        .filter((a) => /总览|概览|索引|overview/i.test(a.title))
+        .map((a) => a.id);
+      const incremental = peers.length > 0;
+      const quality = assessCaptureQuality(content, type, {
+        title,
+        related,
+        links,
+        anchors: Array.isArray(anchors)
+          ? anchors.map((a) => {
+              const o = a as { file?: string; symbol?: string };
+              return { file: o.file, symbol: o.symbol };
+            })
+          : undefined,
+        incremental,
+        hubIds,
+      });
+      let overviewChildGate: {
+        ok: boolean;
+        reasons: string[];
+        shallowIds: string[];
+      } = { ok: true, reasons: [], shallowIds: [] };
+      if (isOverviewTitle(title) && related && related.length > 0) {
+        const resolved = new Map(peers.map((p) => [p.id, p] as const));
+        for (const id of related) {
+          if (!resolved.has(id)) {
+            const a = await ctx.store.getAsset(id);
+            if (a) resolved.set(id, a);
+          }
+        }
+        overviewChildGate = assessOverviewChildrenDepth(
+          related,
+          (id: string) => resolved.get(id),
+        );
+      }
+      if (!quality.ok || !overviewChildGate.ok) {
+        return {
+          captured: false,
+          error: 'quality_gate',
+          title,
+          type,
+          incremental,
+          hubIds,
+          reasons: [...quality.reasons, ...overviewChildGate.reasons],
+          hints: quality.hints,
+          suggestion:
+            '增量也须写深：Codegraph/读码→实现+注意+红线+代码锚点；related/links 挂到本 project 总览或邻卡；总览禁止在子卡全浅时只重挂索引。整理某系统须四阶段后 kmind_coverage 验收。',
+        };
+      }
       const blob = new BlobStore(ctx.vault.rawDir);
       const day = new Date().toISOString().slice(0, 10);
       const relativePath = path.join('manual', `${day}-${Date.now()}.jsonl`);
@@ -148,6 +268,9 @@ async function dispatch(
           type,
           project,
           content,
+          ...(anchors ? { anchors } : {}),
+          ...(related?.length ? { related } : {}),
+          ...(links?.length ? { links } : {}),
           timestamp: new Date().toISOString(),
         })}\n`,
       );
@@ -160,7 +283,39 @@ async function dispatch(
         force: false,
       });
       cache.delete('status');
-      return { captured: true, relativePath, title, type, compile: result };
+      const afterAssets = await ctx.store.queryAssets({
+        project,
+        limit: 100_000,
+      });
+      const topicGuess = guessTopicFromTitle(title);
+      const coverage = assessProjectCoverage(afterAssets, {
+        project,
+        ...(topicGuess ? { topic: topicGuess } : {}),
+      });
+      return {
+        captured: true,
+        relativePath,
+        title,
+        type,
+        compile: result,
+        coverage: {
+          complete: coverage.complete,
+          summary: coverage.summary,
+          nextActions: coverage.nextActions,
+          issueCount: coverage.issues.length,
+          hubs: coverage.hubs,
+          shallow: coverage.shallow.slice(0, 10),
+          duplicateOverviews: coverage.duplicateOverviews,
+        },
+        claimCompleteAllowed: coverage.complete,
+        ...(quality.hints.length ? { hints: quality.hints } : {}),
+        ...(coverage.complete
+          ? {}
+          : {
+              warning:
+                'coverage.complete=false：禁止对外宣称「知识已完整」；按 coverage.nextActions 继续深挖，勿只刷新总览。',
+            }),
+      };
     }
     case 'kmind_graph_query': {
       return ctx.engine.graphQuery(String(args.query ?? ''));
@@ -169,19 +324,70 @@ async function dispatch(
       const format = String(args.format ?? 'tar.gz');
       const output =
         (args.output as string) ||
-        path.join(ctx.vault.root, `export-${Date.now()}.${format === 'git' ? 'git' : 'tar.gz'}`);
+        path.join(
+          ctx.vault.root,
+          `export-${Date.now()}.${format === 'git' ? 'git' : 'tar.gz'}`,
+        );
+      const filter = buildExportFilter(args);
       const exporter = new Exporter(ctx.vault);
       if (format === 'git') {
-        await exporter.exportToGit(output);
-      } else {
-        await fs.mkdir(path.dirname(output), { recursive: true });
-        await exporter.exportToTarGz(output);
+        const manifest = await exporter.exportToGit(output, {
+          filter,
+          initGit: args.initGit === true,
+        });
+        return { exported: true, output, format, manifest };
       }
-      return { exported: true, output };
+      await fs.mkdir(path.dirname(output), { recursive: true });
+      const manifest = await exporter.exportToTarGz(output, filter);
+      return { exported: true, output, format, manifest };
+    }
+    case 'kmind_import': {
+      const input = String(args.input ?? '');
+      if (!input) return { error: 'Missing input' };
+      const format =
+        String(args.format ?? '') ||
+        (input.endsWith('.tar.gz') || input.endsWith('.tgz') ? 'tar.gz' : 'git');
+      const merge = args.merge === true;
+      const conflict = parseConflict(args.conflict);
+      const importer = new Importer(ctx.vault);
+      const result =
+        format === 'git'
+          ? await importer.importFromDirectory(input, { merge, conflict })
+          : await importer.importFromTarGz(input, { merge, conflict });
+      cache.delete('status');
+      return { imported: true, input, format, merge, conflict, result };
     }
     default:
       return { error: `Unknown tool: ${name}` };
   }
+}
+
+function buildExportFilter(args: Record<string, unknown>): ExportFilter | undefined {
+  const projects = toStringList(args.project);
+  const types = toStringList(args.type)
+    .map((t) => KnowledgeTypeEnum.safeParse(t))
+    .filter((r): r is { success: true; data: KnowledgeType } => r.success)
+    .map((r) => r.data);
+  if (!projects.length && !types.length) return undefined;
+  return {
+    projects: projects.length ? projects : undefined,
+    types: types.length ? types : undefined,
+  };
+}
+
+function toStringList(v: unknown): string[] {
+  if (v == null) return [];
+  if (Array.isArray(v)) return v.map(String).map((s) => s.trim()).filter(Boolean);
+  return String(v)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function parseConflict(raw: unknown): ImportConflictPolicy {
+  const v = String(raw ?? 'skip');
+  if (v === 'skip' || v === 'overwrite' || v === 'rename') return v;
+  return 'skip';
 }
 
 function textResult(
@@ -192,4 +398,18 @@ function textResult(
     content: [{ type: 'text', text: JSON.stringify(data) }],
     ...(isError ? { isError: true } : {}),
   };
+}
+
+/** Soft topic hint from overview/detail titles (问数系统知识总览 → 问数). */
+function guessTopicFromTitle(title: string): string | undefined {
+  const t = title.trim();
+  if (!t) return undefined;
+  const m = t.match(
+    /^(.{2,12}?)(?:系统)?(?:知识)?(?:总览|概览|索引|地图)/,
+  );
+  if (m?.[1] && m[1].length >= 2) return m[1];
+  if (/总览|概览|索引/.test(t)) {
+    return t.replace(/(?:系统)?(?:知识)?(?:总览|概览|索引|地图).*$/, '').trim() || undefined;
+  }
+  return undefined;
 }

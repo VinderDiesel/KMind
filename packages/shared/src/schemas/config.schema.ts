@@ -16,9 +16,28 @@ export const KMindConfigSchema = z.object({
     .default({}),
   capture: z
     .object({
-      autoCapture: z.boolean().default(true),
+      /** Pull new sessions from adapters into raw/ during compile. */
+      autoCapture: z.boolean().default(false),
+      /**
+       * Allow compiling `sessions/` raw into knowledge.
+       * Still requires env `KMIND_COMPILE_SESSIONS=1` (double lock).
+       * Default false — session dumps must never become knowledge by accident.
+       */
+      compileSessions: z.boolean().default(false),
       minConfidence: z.number().default(0.6),
+      /** Extra gate when compileSessions is enabled. */
+      sessionMinConfidence: z.number().default(0.9),
       dedupThreshold: z.number().default(0.92),
+      /**
+       * Run assessCaptureQuality on every manual compile (root quality gate).
+       * Failed raw stays pending and does not become an asset.
+       */
+      requireQualityGate: z.boolean().default(true),
+      /**
+       * Reject manual captures with missing or `global` project.
+       * Forces project-scoped knowledge for reliable filters.
+       */
+      requireProject: z.boolean().default(true),
     })
     .default({}),
   adapters: z
@@ -33,6 +52,8 @@ export const KMindConfigSchema = z.object({
     .object({
       schedule: z.string().default('0 9 * * 1'),
       expiryDays: z.number().default(30),
+      /** Warn when architecture_design / code_snippet lack codeAnchors. */
+      requireCodeAnchors: z.boolean().default(true),
     })
     .default({}),
   mcp: z

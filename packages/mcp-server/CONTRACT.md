@@ -6,6 +6,6 @@
 |:---|:---|:---|
 | `read` | search, related, status, ontology_describe | allow |
 | `write` | capture | confirm or autoApprove |
-| `sensitive` | export, graph_query | confirm or autoApprove |
+| `sensitive` | export, import, graph_query | confirm or autoApprove |
 
 Handlers depend on `QueryEngine` / domain services only — never on SQLite directly.

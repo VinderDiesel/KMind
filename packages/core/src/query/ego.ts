@@ -1,4 +1,5 @@
 import type { KnowledgeAsset, KnowledgeType } from '@kmind/shared';
+import { readCodeAnchors } from '../compiler/code-anchors.js';
 import type { SqliteStore } from '../storage/sqlite-store.js';
 import type { HealthIssue } from '../health/rules/expiry.js';
 
@@ -15,6 +16,9 @@ export interface EgoNode {
   status: string;
   ontologyClass: string;
   hasHealthIssue: boolean;
+  /** True when metadata.codeAnchors is non-empty. */
+  hasCodeAnchors: boolean;
+  codeAnchorCount: number;
 }
 
 export interface EgoLink {
@@ -133,6 +137,7 @@ function toEgoNode(
   hop: number,
   hasHealthIssue: boolean,
 ): EgoNode {
+  const anchors = readCodeAnchors(asset.metadata);
   return {
     id: asset.id,
     title: asset.title,
@@ -142,6 +147,8 @@ function toEgoNode(
     status: asset.status,
     ontologyClass: asset.ontologyClass,
     hasHealthIssue,
+    hasCodeAnchors: anchors.length > 0,
+    codeAnchorCount: anchors.length,
   };
 }
 

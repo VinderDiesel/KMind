@@ -12,6 +12,8 @@ export interface ValidationResult {
 }
 
 const TYPE_TO_CLASS: Record<KnowledgeType, string> = {
+  problem: 'Problem',
+  outcome: 'Outcome',
   problem_solution: 'ProblemSolution',
   best_practice: 'BestPractice',
   architecture_design: 'ArchitectureDesign',
@@ -28,6 +30,8 @@ export class OntologyRegistry {
   private ontology: Ontology | null = null;
   private readonly fixedClasses = new Set([
     'KnowledgeAsset',
+    'Problem',
+    'Outcome',
     'ProblemSolution',
     'BestPractice',
     'ArchitectureDesign',

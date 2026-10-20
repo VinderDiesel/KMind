@@ -15,9 +15,10 @@ describe('skills pack', () => {
     expect(existsSync(path.join(root, 'kmind-capture', 'SKILL.md'))).toBe(true);
   });
 
-  it('given pack when listBundledSkills then includes kmind-capture', async () => {
+  it('given pack when listBundledSkills then includes capture and code-bridge', async () => {
     const names = await listBundledSkills();
     expect(names).toContain('kmind-capture');
+    expect(names).toContain('kmind-code-bridge');
   });
 
   it('given targets when map then covers all adapters', () => {

@@ -27,7 +27,12 @@ Each adapter implements the `Adapter` interface from `@kmind/core`:
 
 ## Agent Skills
 
-Bundled skills live in repo `skills/` (also shipped as `packages/cli/skills/`).
+Bundled skills live in repo `skills/` (also shipped as `packages/cli/skills/`):
+
+| Skill | Role |
+|:---|:---|
+| `kmind-capture` | High-quality vault writes (search → template capture) |
+| `kmind-code-bridge` | Route structure Qs to Codegraph, experience Qs to KMind; optional code anchors on capture |
 
 | Command | Effect |
 |:---|:---|

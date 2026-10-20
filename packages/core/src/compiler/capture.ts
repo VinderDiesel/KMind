@@ -1,11 +1,22 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { KnowledgeType, SessionRecord } from '@kmind/shared';
-import { KnowledgeTypeEnum, SessionRecordSchema } from '@kmind/shared';
+import type {
+  AssetLink,
+  CodeAnchor,
+  KnowledgeType,
+  SessionRecord,
+} from '@kmind/shared';
+import {
+  AssetLinkSchema,
+  CodeAnchorSchema,
+  KnowledgeTypeEnum,
+  SessionRecordSchema,
+} from '@kmind/shared';
 import type { Adapter } from '../adapters/types.js';
 import type { BlobStore } from '../storage/blob-store.js';
 import type { DiagnosticCollector } from '../observability/diagnostic-collector.js';
 import type { RawCandidate } from './classifier.js';
+import { sanitizeTitle } from './title.js';
 
 export interface CapturedRaw {
   relativePath: string;
@@ -20,6 +31,9 @@ interface RawLine {
   title?: string;
   type?: string;
   project?: string;
+  anchors?: unknown;
+  related?: unknown;
+  links?: unknown;
   context?: {
     problem?: string;
     alternatives?: string[];
@@ -124,16 +138,17 @@ export class CaptureStage {
       .trim();
 
     const headingTitle = extractMarkdownTitle(text);
-    const title =
+    const rawTitle =
       (typeof meta.title === 'string' && meta.title.trim()) ||
       headingTitle ||
       path.basename(absPath, path.extname(absPath));
+    const title = sanitizeTitle(rawTitle);
 
     const typeHint = parseTypeHint(meta.type) ?? parseTypeFromFooter(text);
     const body = stripCaptureChrome(text, title);
 
     return {
-      title: title.slice(0, 200),
+      title,
       content: body || text,
       rawPath: relativePath,
       typeHint,
@@ -142,8 +157,40 @@ export class CaptureStage {
           ? meta.project.trim()
           : undefined,
       contextHint: meta.context,
+      anchorsHint: parseAnchorsHint(meta.anchors),
+      relatedHint: parseRelatedHint(meta.related),
+      linksHint: parseLinksHint(meta.links),
     };
   }
+}
+
+function parseLinksHint(raw: unknown): AssetLink[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: AssetLink[] = [];
+  for (const item of raw) {
+    const parsed = AssetLinkSchema.safeParse(item);
+    if (parsed.success) out.push(parsed.data);
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function parseRelatedHint(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const ids = raw
+    .filter((x): x is string => typeof x === 'string')
+    .map((x) => x.trim())
+    .filter((x) => /^k-\d{4}-\d{2}-\d{2}-\d{3}$/.test(x));
+  return ids.length > 0 ? [...new Set(ids)] : undefined;
+}
+
+function parseAnchorsHint(raw: unknown): CodeAnchor[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const out: CodeAnchor[] = [];
+  for (const item of raw) {
+    const parsed = CodeAnchorSchema.safeParse(item);
+    if (parsed.success) out.push(parsed.data);
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 /**

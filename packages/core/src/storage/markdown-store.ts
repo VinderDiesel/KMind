@@ -26,7 +26,11 @@ export class MarkdownStore {
     const front = toFrontmatter(parsed);
     const body = String(front.body ?? '');
     delete front.body;
-    const content = matter.stringify(body, front as Record<string, unknown>);
+    // js-yaml (via gray-matter) cannot dump `undefined` — strip nested undefs.
+    const content = matter.stringify(
+      body,
+      stripUndefinedDeep(front) as Record<string, unknown>,
+    );
     const filePath = this.pathFor(parsed.id);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, content, 'utf8');
@@ -126,9 +130,29 @@ function toFrontmatter(asset: KnowledgeAsset): Record<string, unknown> {
     context,
     tags: asset.tags,
     related: asset.related,
+    ...(asset.links?.length ? { links: asset.links } : {}),
     metadata: asset.metadata,
     body: asset.body,
   };
+}
+
+/**
+ * Recursively remove keys with `undefined` values so js-yaml can dump.
+ */
+function stripUndefinedDeep(value: unknown): unknown {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => stripUndefinedDeep(item))
+      .filter((item) => item !== undefined);
+  }
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (v === undefined) continue;
+    out[k] = stripUndefinedDeep(v);
+  }
+  return out;
 }
 
 function fromFrontmatter(data: Record<string, unknown>): Omit<KnowledgeAsset, 'body'> {
@@ -161,6 +185,11 @@ function fromFrontmatter(data: Record<string, unknown>): Omit<KnowledgeAsset, 'b
     },
     tags: (data.tags as string[]) ?? [],
     related: (data.related as string[]) ?? [],
+    links: Array.isArray(data.links)
+      ? (data.links as KnowledgeAsset['links'])
+      : Array.isArray((data.metadata as Record<string, unknown> | undefined)?.links)
+        ? ((data.metadata as Record<string, unknown>).links as KnowledgeAsset['links'])
+        : [],
     metadata: (data.metadata as Record<string, unknown>) ?? {},
   };
 }

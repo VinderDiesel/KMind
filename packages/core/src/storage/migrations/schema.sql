@@ -81,8 +81,11 @@ CREATE TABLE IF NOT EXISTS raw_hashes (
   path TEXT PRIMARY KEY,
   hash TEXT NOT NULL,
   compiled_at TEXT,
-  status TEXT NOT NULL DEFAULT 'pending'
+  status TEXT NOT NULL DEFAULT 'pending',
+  asset_id TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_ka_raw_path ON knowledge_assets(source_raw_path);
 
 CREATE TABLE IF NOT EXISTS compile_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),

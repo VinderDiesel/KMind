@@ -1,4 +1,6 @@
 import type {
+  AssetLink,
+  CodeAnchor,
   DecisionTrajectory,
   KnowledgeType,
   SessionRecord,
@@ -13,6 +15,12 @@ export interface RawCandidate {
   typeHint?: KnowledgeType;
   projectHint?: string;
   contextHint?: Partial<DecisionTrajectory>;
+  /** Explicit anchors from capture JSON (preferred over body parse alone). */
+  anchorsHint?: CodeAnchor[];
+  /** Related asset ids to link on compile (related_to). */
+  relatedHint?: string[];
+  /** Typed outbound edges (solves / verifies / results_in / …). */
+  linksHint?: AssetLink[];
 }
 
 export interface ClassificationResult {
@@ -53,8 +61,18 @@ const RULES: Array<{ type: KnowledgeType; patterns: RegExp[]; tags: string[] }> 
     tags: ['process'],
   },
   {
+    type: 'outcome',
+    patterns: [/实施结果|验证结果|上线结果|outcome|verified|验证通过/i],
+    tags: ['outcome'],
+  },
+  {
+    type: 'problem',
+    patterns: [/未解决|待排查|open\s*issue|问题跟踪|症状|复现步骤/i],
+    tags: ['problem'],
+  },
+  {
     type: 'problem_solution',
-    patterns: [/fix(ed)?\b/i, /solution/i, /resolve/i, /问题/],
+    patterns: [/fix(ed)?\b/i, /solution/i, /resolve/i, /解决方案/],
     tags: ['solution'],
   },
   {
@@ -70,6 +88,8 @@ const TYPE_TAGS: Record<KnowledgeType, string[]> = {
   code_snippet: ['code'],
   tool_usage: ['tool'],
   process_spec: ['process'],
+  problem: ['problem'],
+  outcome: ['outcome'],
   problem_solution: ['solution'],
   best_practice: ['practice'],
 };

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createKnowledgeAsset, resetFactoryCounters } from '@kmind/shared';
 import { createVault, SqliteStore } from '@kmind/core';
-import { handleUiApi } from './api.js';
+import { clearUiHealthCache, handleUiApi } from './api.js';
 
 describe('handleUiApi', () => {
   let dir: string;
@@ -13,6 +13,7 @@ describe('handleUiApi', () => {
 
   beforeEach(async () => {
     resetFactoryCounters();
+    clearUiHealthCache();
     dir = mkdtempSync(path.join(tmpdir(), 'kmind-ui-api-'));
     vault = createVault(path.join(dir, 'vault'));
     await vault.init();
@@ -35,6 +36,7 @@ describe('handleUiApi', () => {
 
   afterEach(() => {
     store.close();
+    clearUiHealthCache();
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -109,5 +111,53 @@ describe('handleUiApi', () => {
       new URLSearchParams(),
     );
     expect(res.status).toBe(405);
+  });
+
+  it('given graph when GET then returns global mode nodes', async () => {
+    const res = await handleUiApi(
+      { vault, store },
+      'GET',
+      '/api/graph',
+      new URLSearchParams({ cap: '50' }),
+    );
+    expect(res.status).toBe(200);
+    const body = res.body as {
+      mode: string;
+      nodes: Array<{ id: string }>;
+      links: unknown[];
+    };
+    expect(body.mode).toBe('global');
+    expect(body.nodes.length).toBe(2);
+    expect(body.links.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('given health with rule filter when GET then scopes issues', async () => {
+    const all = await handleUiApi(
+      { vault, store },
+      'GET',
+      '/api/health',
+      new URLSearchParams(),
+    );
+    expect(all.status).toBe(200);
+    const allBody = all.body as {
+      issues: Array<{ rule: string }>;
+      totalIssueCount: number;
+    };
+    const rule = allBody.issues[0]?.rule;
+    if (!rule) {
+      expect(allBody.totalIssueCount).toBe(0);
+      return;
+    }
+    const filtered = await handleUiApi(
+      { vault, store },
+      'GET',
+      '/api/health',
+      new URLSearchParams({ rule }),
+    );
+    const body = filtered.body as {
+      issues: Array<{ rule: string }>;
+      issueCount: number;
+    };
+    expect(body.issues.every((i) => i.rule === rule)).toBe(true);
   });
 });

@@ -15,6 +15,7 @@ export {
 
 export {
   createPipeline,
+  isSessionCompileAllowed,
   type CompileOptions,
   type CompileResult,
   type CompilePipeline,
@@ -28,6 +29,31 @@ export {
   type RawCandidate,
 } from './compiler/classifier.js';
 export { LocalEmbedder, hashEmbed, type Embedder } from './compiler/embedder.js';
+export {
+  extractCodeAnchors,
+  readCodeAnchors,
+  withCodeAnchorsMetadata,
+} from './compiler/code-anchors.js';
+export { sanitizeTitle } from './compiler/title.js';
+export {
+  assessCaptureQuality,
+  hasCodeCitation,
+  isOverviewTitle,
+  type CaptureQualityResult,
+  type CaptureQualityOptions,
+} from './compiler/capture-quality.js';
+export {
+  getProblemStatus,
+  type ProblemStatusReport,
+  type ProblemResolutionStatus,
+} from './query/problem-status.js';
+export {
+  assessProjectCoverage,
+  assessOverviewChildrenDepth,
+  type CoverageReport,
+  type CoverageIssue,
+  type CoverageOptions,
+} from './query/coverage.js';
 
 export {
   createQueryEngine,
@@ -47,11 +73,29 @@ export {
   type EgoLink,
   type EgoNode,
 } from './query/ego.js';
+export {
+  buildGlobalGraph,
+  GLOBAL_DEFAULT_NODE_CAP,
+  GLOBAL_MAX_NODE_CAP,
+  type GlobalGraph,
+} from './query/global-graph.js';
 
 export { runHealthCheck, type HealthReport } from './health/checker.js';
 export type { HealthIssue } from './health/rules/expiry.js';
-export { Exporter } from './migration/exporter.js';
-export { Importer } from './migration/importer.js';
+export {
+  Exporter,
+  EXPORT_FORMAT_VERSION,
+  initGitRepo,
+  type ExportFilter,
+  type ExportManifest,
+  type ExportToGitOptions,
+} from './migration/exporter.js';
+export {
+  Importer,
+  type ImportOptions,
+  type ImportResult,
+  type ImportConflictPolicy,
+} from './migration/importer.js';
 
 export type {
   Adapter,

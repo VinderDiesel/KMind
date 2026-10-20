@@ -24,6 +24,20 @@ const HOP_COLOR = {
   2: '#7a8b9e',
 } as const;
 
+/** Type colors for global mode (problem gets weak emphasis). */
+const TYPE_COLOR: Record<string, string> = {
+  problem: '#f0a060',
+  outcome: '#6bcb8e',
+  problem_solution: '#5eb0e8',
+  best_practice: '#5eead4',
+  architecture_design: '#c4a5f5',
+  tool_usage: '#7a8b9e',
+  pitfall: '#e8b86d',
+  code_snippet: '#8ab4f8',
+  process_spec: '#9aa8b8',
+};
+
+const PROBLEM_COLOR = '#f0a060';
 const NODE_REL_SIZE = 4.5;
 const glowTexCache = new Map<string, CanvasTexture>();
 const sphereGeoCache = new Map<string, SphereGeometry>();
@@ -43,18 +57,26 @@ interface GraphLink {
   relationType: string;
 }
 
+export type GraphViewMode = 'ego' | 'global';
+
 interface GraphViewProps {
   graph: EgoGraph;
+  mode?: GraphViewMode;
   onSelect: (id: string) => void;
 }
 
 /**
- * 3D ego force graph with smooth glowing spheres and hop-shell coloring.
+ * 3D force graph: ego hop shells, or global type-colored layout.
  */
-export function GraphView({ graph, onSelect }: GraphViewProps) {
+export function GraphView({
+  graph,
+  mode = 'ego',
+  onSelect,
+}: GraphViewProps) {
   const fgRef = useRef<
     ForceGraphMethods<NodeObject<GraphNode>, GraphLink> | undefined
   >(undefined);
+  const isGlobal = mode === 'global';
 
   const hopOf = useMemo(
     () => new Map(graph.nodes.map((n) => [n.id, n.hop])),
@@ -83,9 +105,12 @@ export function GraphView({ graph, onSelect }: GraphViewProps) {
     }
   }, []);
 
-  const makeNode = useCallback((n: NodeObject<GraphNode>): Object3D => {
-    return createGlowingNode(n as GraphNode);
-  }, []);
+  const makeNode = useCallback(
+    (n: NodeObject<GraphNode>): Object3D => {
+      return createGlowingNode(n as GraphNode, isGlobal);
+    },
+    [isGlobal],
+  );
 
   useEffect(() => {
     const fg = fgRef.current;
@@ -94,14 +119,19 @@ export function GraphView({ graph, onSelect }: GraphViewProps) {
     const charge = fg.d3Force('charge') as
       | { strength?: (n: number) => void }
       | undefined;
-    charge?.strength?.(-110);
+    charge?.strength?.(isGlobal ? -80 : -110);
 
-    fg.d3Force('radial', createRadialForce(graph.focusId, graph.nodes));
+    if (!isGlobal && graph.focusId) {
+      fg.d3Force('radial', createRadialForce(graph.focusId, graph.nodes));
+    } else {
+      fg.d3Force('radial', null);
+    }
 
     const linkForce = fg.d3Force('link') as
       | { distance?: (fn: (l: GraphLink) => number) => void }
       | undefined;
     linkForce?.distance?.((l) => {
+      if (isGlobal) return 48;
       const hop = Math.max(
         hopOf.get(resolveId(l.source)) ?? 1,
         hopOf.get(resolveId(l.target)) ?? 1,
@@ -115,7 +145,7 @@ export function GraphView({ graph, onSelect }: GraphViewProps) {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
-  }, [graph, hopOf, fit]);
+  }, [graph, hopOf, fit, isGlobal]);
 
   return (
     <ForceGraph3D
@@ -130,15 +160,32 @@ export function GraphView({ graph, onSelect }: GraphViewProps) {
         const node = n as GraphNode;
         const short =
           node.title.length > 32 ? `${node.title.slice(0, 31)}…` : node.title;
-        return `${short}\n${node.type} · hop ${node.hop}${
+        const anchors =
+          node.hasCodeAnchors && (node.codeAnchorCount ?? 0) > 0
+            ? `\n⌘ ${node.codeAnchorCount} code anchors`
+            : '';
+        const hopLine = isGlobal ? node.type : `${node.type} · hop ${node.hop}`;
+        const problem =
+          node.type === 'problem' ? '\n◆ open problem' : '';
+        return `${short}\n${hopLine}${
           node.hasHealthIssue ? '\n⚠ health' : ''
-        }`;
+        }${problem}${anchors}`;
       }}
-      linkColor={(l) => linkTone(l as GraphLink, hopOf)}
-      linkWidth={(l) => (linkHop(l as GraphLink, hopOf) <= 1 ? 1.35 : 0.45)}
+      linkColor={(l) =>
+        isGlobal
+          ? 'rgba(122,139,158,0.35)'
+          : linkTone(l as GraphLink, hopOf)
+      }
+      linkWidth={(l) =>
+        isGlobal
+          ? 0.7
+          : linkHop(l as GraphLink, hopOf) <= 1
+            ? 1.35
+            : 0.45
+      }
       linkOpacity={0.8}
       linkDirectionalParticles={(l) =>
-        linkHop(l as GraphLink, hopOf) <= 1 ? 2 : 0
+        isGlobal ? 0 : linkHop(l as GraphLink, hopOf) <= 1 ? 2 : 0
       }
       linkDirectionalParticleWidth={1.1}
       linkDirectionalParticleSpeed={0.004}
@@ -152,9 +199,9 @@ export function GraphView({ graph, onSelect }: GraphViewProps) {
 }
 
 /** Build a core sphere + additive halo shell + soft bloom sprite. */
-function createGlowingNode(node: GraphNode): Object3D {
-  const hex = colorFor(node);
-  const radius = radiusFor(node);
+function createGlowingNode(node: GraphNode, isGlobal: boolean): Object3D {
+  const hex = colorFor(node, isGlobal);
+  const radius = radiusFor(node, isGlobal);
   const group = new Group();
 
   const core = new Mesh(
@@ -163,8 +210,25 @@ function createGlowingNode(node: GraphNode): Object3D {
   );
   group.add(core);
 
-  const glowMul = node.hop === 0 ? 5.2 : node.hop === 1 ? 3.6 : 2.6;
-  const glowOpacity = node.hop === 0 ? 1 : node.hop === 1 ? 0.72 : 0.4;
+  const isProblem = node.type === 'problem';
+  const glowMul = isGlobal
+    ? isProblem
+      ? 4.2
+      : 2.8
+    : node.hop === 0
+      ? 5.2
+      : node.hop === 1
+        ? 3.6
+        : 2.6;
+  const glowOpacity = isGlobal
+    ? isProblem
+      ? 0.85
+      : 0.45
+    : node.hop === 0
+      ? 1
+      : node.hop === 1
+        ? 0.72
+        : 0.4;
   const bloom = new Sprite(
     new SpriteMaterial({
       map: glowTexture(hex),
@@ -177,25 +241,45 @@ function createGlowingNode(node: GraphNode): Object3D {
   bloom.scale.set(radius * glowMul, radius * glowMul, 1);
   group.add(bloom);
 
+  if (node.hasCodeAnchors) {
+    const codeBloom = new Sprite(
+      new SpriteMaterial({
+        map: glowTexture('#8ab4f8'),
+        transparent: true,
+        depthWrite: false,
+        blending: AdditiveBlending,
+        opacity: 0.55,
+      }),
+    );
+    codeBloom.scale.set(radius * (glowMul + 1.4), radius * (glowMul + 1.4), 1);
+    group.add(codeBloom);
+  }
+
   return group;
 }
 
-function colorFor(node: GraphNode): string {
+function colorFor(node: GraphNode, isGlobal: boolean): string {
   if (node.hasHealthIssue) return '#f07178';
+  if (node.type === 'problem') return PROBLEM_COLOR;
+  if (isGlobal) return TYPE_COLOR[node.type] ?? HOP_COLOR[2];
   if (node.hop === 0) return HOP_COLOR[0];
   if (node.hop === 1) return HOP_COLOR[1];
   return HOP_COLOR[2];
 }
 
-function nodeVal(node: GraphNode): number {
+function nodeVal(node: GraphNode, isGlobal: boolean): number {
+  if (isGlobal) {
+    if (node.type === 'problem') return 14;
+    return 7;
+  }
   if (node.hop === 0) return 22;
   if (node.hop === 1) return 9;
   return Math.max(3.2, 5.2 - node.hop * 0.4);
 }
 
 /** Match three-forcegraph radius: cbrt(val) * nodeRelSize. */
-function radiusFor(node: GraphNode): number {
-  return Math.cbrt(nodeVal(node)) * NODE_REL_SIZE;
+function radiusFor(node: GraphNode, isGlobal: boolean): number {
+  return Math.cbrt(nodeVal(node, isGlobal)) * NODE_REL_SIZE;
 }
 
 function sphereGeometry(radius: number, segments: number): SphereGeometry {
