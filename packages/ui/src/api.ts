@@ -35,6 +35,8 @@ export interface AssetDetail {
   type: string;
   project: string;
   body?: string;
+  related?: string[];
+  links?: Array<{ id: string; relation: string }>;
   metadata?: { codeAnchors?: CodeAnchor[]; [k: string]: unknown };
 }
 
@@ -153,4 +155,34 @@ export function fetchStatus(): Promise<VaultStatus> {
 /** Asset detail. */
 export function fetchAsset(id: string): Promise<AssetDetail> {
   return getJson(`/api/assets/${encodeURIComponent(id)}`);
+}
+
+export interface CoverageSummary {
+  project: string;
+  topic?: string;
+  complete: boolean;
+  summary: string;
+  nextActions: string[];
+  issueCount: number;
+  hubs: Array<{
+    id: string;
+    title: string;
+    childCount: number;
+    shallowCount: number;
+  }>;
+  shallow: Array<{ id: string; title: string; type: string; chars: number }>;
+  duplicateOverviews: Array<{ title: string; ids: string[] }>;
+}
+
+/** Project/topic coverage vs catalog-only. */
+export function fetchCoverage(options: {
+  project: string;
+  topic?: string;
+  hubId?: string;
+}): Promise<CoverageSummary> {
+  const params = new URLSearchParams();
+  params.set('project', options.project);
+  if (options.topic) params.set('topic', options.topic);
+  if (options.hubId) params.set('hubId', options.hubId);
+  return getJson(`/api/coverage?${params.toString()}`);
 }

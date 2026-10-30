@@ -16,6 +16,7 @@ import {
   type Object3D,
 } from 'three';
 import type { EgoGraph, EgoNode } from './api';
+import { relationColor } from './relationColors';
 
 /** Hop shell palette — matches legend for quick reading. */
 const HOP_COLOR = {
@@ -174,22 +175,27 @@ export function GraphView({
       linkColor={(l) =>
         isGlobal
           ? 'rgba(122,139,158,0.35)'
-          : linkTone(l as GraphLink, hopOf)
+          : relationLinkColor(l as GraphLink, hopOf)
       }
-      linkWidth={(l) =>
-        isGlobal
-          ? 0.7
-          : linkHop(l as GraphLink, hopOf) <= 1
-            ? 1.35
-            : 0.45
-      }
-      linkOpacity={0.8}
+      linkWidth={(l) => {
+        if (isGlobal) return 0.7;
+        const link = l as GraphLink;
+        const hop = linkHop(link, hopOf);
+        const typed = link.relationType && link.relationType !== 'related_to';
+        if (hop <= 1 && typed) return 1.6;
+        if (hop <= 1) return 1.2;
+        return 0.45;
+      }}
+      linkOpacity={0.85}
+      linkLabel={(l) => (l as GraphLink).relationType || 'related_to'}
       linkDirectionalParticles={(l) =>
         isGlobal ? 0 : linkHop(l as GraphLink, hopOf) <= 1 ? 2 : 0
       }
       linkDirectionalParticleWidth={1.1}
       linkDirectionalParticleSpeed={0.004}
-      linkDirectionalParticleColor={() => 'rgba(94,234,212,0.85)'}
+      linkDirectionalParticleColor={(l) =>
+        relationColor((l as GraphLink).relationType || 'related_to', 0.9)
+      }
       onNodeClick={(n) => onSelect((n as GraphNode).id)}
       onEngineStop={fit}
       cooldownTicks={110}
@@ -333,11 +339,16 @@ function linkHop(link: GraphLink, hopOf: Map<string, number>): number {
   return Math.min(a, b);
 }
 
-function linkTone(link: GraphLink, hopOf: Map<string, number>): string {
+/** Prefer relation-type color; dim by hop so far shells stay quiet. */
+function relationLinkColor(
+  link: GraphLink,
+  hopOf: Map<string, number>,
+): string {
   const hop = linkHop(link, hopOf);
-  if (hop === 0) return 'rgba(94,234,212,0.75)';
-  if (hop === 1) return 'rgba(232,184,109,0.45)';
-  return 'rgba(122,139,158,0.22)';
+  const rel = link.relationType || 'related_to';
+  if (hop >= 2) return relationColor(rel, 0.22);
+  if (hop === 1) return relationColor(rel, 0.55);
+  return relationColor(rel, 0.85);
 }
 
 function resolveId(ref: string | GraphNode): string {

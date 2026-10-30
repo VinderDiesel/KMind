@@ -5,6 +5,7 @@ import type {
   KnowledgeType,
   SessionRecord,
 } from '@kmind/shared';
+import type { AssetTypeRegistry } from '../asset-types/registry.js';
 
 export interface RawCandidate {
   title: string;
@@ -34,7 +35,11 @@ export interface Classifier {
   classify(candidate: RawCandidate): Promise<ClassificationResult>;
 }
 
-const RULES: Array<{ type: KnowledgeType; patterns: RegExp[]; tags: string[] }> = [
+const FALLBACK_RULES: Array<{
+  type: KnowledgeType;
+  patterns: RegExp[];
+  tags: string[];
+}> = [
   {
     type: 'architecture_design',
     patterns: [/architect/i, /event[- ]driven/i, /microservice/i, /设计架构/],
@@ -82,22 +87,13 @@ const RULES: Array<{ type: KnowledgeType; patterns: RegExp[]; tags: string[] }> 
   },
 ];
 
-const TYPE_TAGS: Record<KnowledgeType, string[]> = {
-  architecture_design: ['architecture'],
-  pitfall: ['pitfall'],
-  code_snippet: ['code'],
-  tool_usage: ['tool'],
-  process_spec: ['process'],
-  problem: ['problem'],
-  outcome: ['outcome'],
-  problem_solution: ['solution'],
-  best_practice: ['practice'],
-};
-
 /**
  * Local heuristic classifier (default). No network required.
+ * When AssetTypeRegistry is provided, classifyPatterns come from the registry.
  */
 export class HeuristicClassifier implements Classifier {
+  constructor(private readonly assetTypes?: AssetTypeRegistry) {}
+
   async classify(candidate: RawCandidate): Promise<ClassificationResult> {
     const text = `${candidate.title}\n${candidate.content}`;
     const context = buildContext(candidate, text);
@@ -107,9 +103,14 @@ export class HeuristicClassifier implements Classifier {
         type: candidate.typeHint,
         confidence: 0.95,
         context,
-        tags: TYPE_TAGS[candidate.typeHint] ?? ['manual'],
+        tags: [candidate.typeHint],
       };
     }
+
+    const rules =
+      this.assetTypes && this.assetTypes.getClassifyRules().length > 0
+        ? this.assetTypes.getClassifyRules()
+        : FALLBACK_RULES;
 
     let best: { type: KnowledgeType; score: number; tags: string[] } = {
       type: 'best_practice',
@@ -117,7 +118,7 @@ export class HeuristicClassifier implements Classifier {
       tags: ['general'],
     };
 
-    for (const rule of RULES) {
+    for (const rule of rules) {
       let hits = 0;
       for (const p of rule.patterns) {
         if (p.test(text)) hits += 1;

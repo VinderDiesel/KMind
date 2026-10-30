@@ -1,5 +1,5 @@
 import { Exporter, type ExportFilter } from '@kmind/core';
-import { KnowledgeTypeEnum, type KnowledgeType } from '@kmind/shared';
+import { KnowledgeTypeIdSchema, type KnowledgeType } from '@kmind/shared';
 import type { AppContext } from '../context.js';
 import { success } from '../exit.js';
 
@@ -52,7 +52,7 @@ export async function cmdExport(
 function buildFilter(options: CmdExportOptions): ExportFilter | undefined {
   const projects = toList(options.project);
   const types = toList(options.type)
-    .map((t) => KnowledgeTypeEnum.safeParse(t))
+    .map((t) => KnowledgeTypeIdSchema.safeParse(t))
     .filter((r): r is { success: true; data: KnowledgeType } => r.success)
     .map((r) => r.data);
   if (!projects.length && !types.length) return undefined;

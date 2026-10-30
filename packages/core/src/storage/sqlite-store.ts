@@ -402,8 +402,13 @@ export class SqliteStore {
 
   /**
    * Rebuild entire index from Markdown knowledge directory.
+   * Backfills metadata.codeAnchors from ## 代码锚点 / path:line when missing.
+   * Two-pass upsert so related/links FK targets exist before edges are written.
    */
   async rebuildFromMarkdown(knowledgeDir: string): Promise<void> {
+    const { enrichAssetCodeAnchors } = await import(
+      '../compiler/code-anchors.js'
+    );
     const store = new MarkdownStore(knowledgeDir);
     const files = await store.list();
     this.withTransaction(() => {
@@ -413,8 +418,23 @@ export class SqliteStore {
       this.db.exec('DELETE FROM knowledge_vectors');
       this.db.exec('DELETE FROM knowledge_assets');
     });
+    const assets = [];
     for (const file of files) {
-      const asset = await store.readFile(file);
+      const raw = await store.readFile(file);
+      const asset = enrichAssetCodeAnchors(raw);
+      const before = JSON.stringify(raw.metadata?.codeAnchors ?? null);
+      const after = JSON.stringify(asset.metadata?.codeAnchors ?? null);
+      if (before !== after) {
+        await store.write(asset);
+      }
+      assets.push(asset);
+    }
+    // Pass 1: rows only (no outbound edges) so every id exists.
+    for (const asset of assets) {
+      await this.upsertAsset({ ...asset, related: [], links: [] });
+    }
+    // Pass 2: restore related/links edges.
+    for (const asset of assets) {
       await this.upsertAsset(asset);
     }
   }

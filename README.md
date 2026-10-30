@@ -216,6 +216,9 @@ kmind lint
 | `kmind init` | 初始化 Vault |
 | `kmind compile` | 将 raw 会话编译为知识资产 |
 | `kmind search <query>` | 混合检索 |
+| `kmind pack [query] --id <id>` | Context Pack（主卡+邻域+锚点） |
+| `kmind suggest-capture <content>` | 写入建议（不落库） |
+| `kmind evolution scan\|status\|ack` | 进化队列（coverage+lint 待办） |
 | `kmind capture <content>` | 手动捕获知识（`--related` / `--anchors`） |
 | `kmind purge-sessions` | 删除 session 编译出的资产（保留 manual + raw） |
 | `kmind lint` | 健康检查（含 coverage 浅卡/重复总览） |
@@ -228,6 +231,46 @@ kmind lint
 | `kmind adapters list` | 列出适配器 |
 | `kmind adapters install <name>` | 为指定终端写入 MCP 配置 |
 | `kmind hook <event>` | 生命周期 Hook 入口 |
+| `kmind schedule list/set/unset/run/start/stop/status` | 按 adapter cron 自动整理 |
+
+### 自动整理（Schedule）
+
+按 **每个 adapter** 配置 5 字段 cron；`kmind schedule start` 常驻轮询，到期后对该 adapter 执行：
+
+`capture(raw) → compile → lint → reindex`
+
+**不会绕过 Session 双闸门**：默认仍不会把 `raw/sessions/` 升成 knowledge。
+
+`~/.kmind/config.yaml` 示例：
+
+```yaml
+adapters:
+  cursor:
+    enabled: true
+    schedule: "0 */6 * * *"   # 每 6 小时
+  claude-code:
+    enabled: true
+    schedule: "0 2 * * *"     # 每天 02:00
+schedule:
+  enabled: true
+  tickSeconds: 30             # daemon 轮询间隔
+```
+
+常用命令：
+
+```bash
+kmind schedule set cursor --cron "0 */6 * * *"
+kmind schedule list
+kmind schedule run --adapter cursor --force   # 立即跑一轮
+kmind schedule start --daemon                 # 后台常驻，stdout 打印 pid
+kmind schedule start                          # 前台常驻（调试）
+kmind schedule status
+kmind schedule stop
+```
+
+- PID：`~/.kmind/audit/schedule.pid`
+- 日志：`~/.kmind/audit/schedule.log`（`--daemon` 时）
+- 状态：`~/.kmind/audit/schedule-state.json`
 
 ### 本地知识 UI（M5）
 
@@ -237,7 +280,21 @@ kmind ui
 # 或指定焦点：kmind ui --focus k-2026-01-01-001
 ```
 
-浏览器打开后可切换 **Ego / Global**：Ego 为 3D 邻域（默认 hop=2，节点上限 150）；Global 为全库图谱（默认上限 300，可按 project 过滤）。右侧 HUD 含全库健康仪表盘（按规则筛选、点击告警进入焦点）与焦点邻域健康。`problem` 节点弱高亮。仅绑定 `127.0.0.1`，API 只读。
+浏览器打开后可切换 **Ego / Global**。Ego 默认 **阅读模式**：主栏正文；侧栏「阅读 / 延伸 / 健康·覆盖」；图谱按需打开（默认 hop=1，边按 `relationType` 着色）。健康默认只列 Focus+Hop1，Hop2+ 可展开；侧栏接入 `coverage` 摘要。Global 为全库巡检台。`kmind reindex` 回填 `metadata.codeAnchors`。仅绑定 `127.0.0.1`，API 只读。
+
+#### 界面示例
+
+**Ego · 阅读**：搜到知识卡后主栏渲染 Markdown（实现方式 / 注意 / 红线）；侧栏 Focus 完整度与代码锚点只计本卡。
+
+![Ego 阅读模式：广银落地范围与五题验收基线](docs/images/ui-ego-read.jpg)
+
+**Ego · 延伸**：按 `part_of` / `related_to` 等关系列出 Hop1 邻居，点击即可换焦点继续读。
+
+![Ego 延伸阅读：按关系分组的邻卡](docs/images/ui-ego-extend.jpg)
+
+**Global · 巡检**：全库图谱 + Vault 健康告警（运维视角，非单卡阅读）。
+
+![Global 全库巡检：图谱与 Vault health](docs/images/ui-global-health.jpg)
 
 ---
 
@@ -264,6 +321,9 @@ kmind ui
 | 工具 | 效果级别 | 说明 |
 |:---|:---|:---|
 | `kmind_search` | read | 混合检索（传资产 id 则精确命中；manual 加权） |
+| `kmind_pack` | read | Context Pack：主卡+邻域+锚点（Agent 结构化召回，ADR-002） |
+| `kmind_capture_suggest` | read | 写入建议（去重/类型/挂图/链接）；确认后回灌 capture |
+| `kmind_evolution_queue` | read | 进化待办（coverage+lint）；只诊断不自动写 |
 | `kmind_get` | read | 按精确 id 取回单条资产 |
 | `kmind_related` | read | 按图谱查找关联知识 |
 | `kmind_status` | read | Vault 健康状态 |
@@ -291,6 +351,7 @@ kmind ui
 ├── raw/                # 原始会话（不可变）
 ├── ontology/
 │   └── ontology.yaml
+├── asset-types/          # ADR-001 类型覆盖（可选 YAML）
 ├── index/              # SQLite 索引（可重建）
 └── config.yaml
 ```

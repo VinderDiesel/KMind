@@ -4,6 +4,7 @@ import {
   buildEgoGraph,
   buildGlobalGraph,
   filterEgoHealthIssues,
+  assessProjectCoverage,
   EGO_DEFAULT_DEPTH,
   EGO_DEFAULT_NODE_CAP,
   GLOBAL_DEFAULT_NODE_CAP,
@@ -13,7 +14,7 @@ import {
   type HealthIssue,
   type HealthReport,
 } from '@kmind/core';
-import { KnowledgeTypeEnum, type KnowledgeType } from '@kmind/shared';
+import { KnowledgeTypeIdSchema, type KnowledgeType } from '@kmind/shared';
 
 export interface UiApiContext {
   vault: Vault;
@@ -143,6 +144,37 @@ export async function handleUiApi(
     };
   }
 
+  if (pathname === '/api/coverage') {
+    const project = searchParams.get('project')?.trim() ?? '';
+    if (!project || project === 'global') {
+      return {
+        status: 400,
+        body: {
+          error: 'project_required',
+          suggestion: 'Pass ?project=… (not global)',
+        },
+      };
+    }
+    const topic = searchParams.get('topic')?.trim() || undefined;
+    const hubId = searchParams.get('hubId')?.trim() || undefined;
+    const assets = await ctx.store.queryAssets({ project, limit: 100_000 });
+    const report = assessProjectCoverage(assets, { project, topic, hubId });
+    return {
+      status: 200,
+      body: {
+        complete: report.complete,
+        summary: report.summary,
+        nextActions: report.nextActions.slice(0, 8),
+        issueCount: report.issues.length,
+        hubs: report.hubs.slice(0, 8),
+        shallow: report.shallow.slice(0, 8),
+        duplicateOverviews: report.duplicateOverviews,
+        topic: report.topic,
+        project: report.project,
+      },
+    };
+  }
+
   const assetMatch = /^\/api\/assets\/([^/]+)$/.exec(pathname);
   if (assetMatch) {
     const id = decodeURIComponent(assetMatch[1] ?? '');
@@ -236,7 +268,7 @@ function parseTypes(raw: string | null): KnowledgeType[] {
   const out: KnowledgeType[] = [];
   for (const part of raw.split(',')) {
     const t = part.trim();
-    const parsed = KnowledgeTypeEnum.safeParse(t);
+    const parsed = KnowledgeTypeIdSchema.safeParse(t);
     if (parsed.success) out.push(parsed.data);
   }
   return out;

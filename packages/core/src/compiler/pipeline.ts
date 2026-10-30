@@ -15,6 +15,7 @@ import { GraphBuilder, nextKnowledgeId } from './graph-builder.js';
 import { LocalEmbedder, type Embedder } from './embedder.js';
 import type { OntologyRegistry } from '../ontology/ontology-registry.js';
 import type { OntologyEvolver } from '../ontology/ontology-evolver.js';
+import type { AssetTypeRegistry } from '../asset-types/registry.js';
 import { DiagnosticCollector } from '../observability/diagnostic-collector.js';
 import { traceLifecycle } from '../observability/trace.js';
 import type { Adapter } from '../adapters/types.js';
@@ -59,6 +60,8 @@ export interface PipelineDeps {
   sqlite: SqliteStore;
   registry: OntologyRegistry;
   evolver?: OntologyEvolver;
+  /** ADR-001 asset type registry (templates / gates / classifyPatterns). */
+  assetTypes?: AssetTypeRegistry;
   classifier?: Classifier;
   embedder?: Embedder;
   adapters?: Adapter[];
@@ -113,7 +116,9 @@ class PipelineImpl implements CompilePipeline {
     const blob = new BlobStore(this.vault.rawDir);
     const markdown = new MarkdownStore(this.vault.knowledgeDir);
     const capture = new CaptureStage(this.vault.rawDir, blob, this.diagnostics);
-    const classifier = this.deps.classifier ?? new HeuristicClassifier();
+    const assetTypes = this.deps.assetTypes;
+    const classifier =
+      this.deps.classifier ?? new HeuristicClassifier(assetTypes);
     const mapper = new OntologyMapper(this.deps.registry, this.deps.evolver);
     const graph = new GraphBuilder(this.deps.sqlite);
     const embedder = this.deps.embedder ?? new LocalEmbedder();
@@ -213,6 +218,20 @@ class PipelineImpl implements CompilePipeline {
           continue;
         }
 
+        if (assetTypes && !assetTypes.isCapturable(classified.type)) {
+          result.gated += 1;
+          await this.deps.sqlite.setRawHash(relativePath, hash, 'pending');
+          this.diagnostics.add({
+            category: 'CAPTURE_ERROR',
+            severity: 'high',
+            message: `Asset type not capturable: ${classified.type}`,
+            path: relativePath,
+            suggestion:
+              'Use an enabled type from kmind_asset_types, or re-enable in vault/asset-types',
+          });
+          continue;
+        }
+
         if (isManual && requireQualityGate) {
           const peers = await this.deps.sqlite.queryAssets({
             project: assetProject,
@@ -231,6 +250,7 @@ class PipelineImpl implements CompilePipeline {
               anchors: candidate.anchorsHint,
               incremental: peers.length > 0,
               hubIds,
+              typeDef: assetTypes?.get(classified.type),
             },
           );
           if (!quality.ok) {

@@ -13,6 +13,7 @@ export async function cmdCompile(
     sqlite: ctx.store,
     registry: ctx.registry,
     evolver: ctx.evolver,
+    assetTypes: ctx.assetTypes,
     adapters: ctx.adapters,
   });
   const result = await pipeline.run({

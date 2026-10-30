@@ -1,4 +1,4 @@
-import { KnowledgeTypeEnum, RelationTypeEnum } from '@kmind/shared';
+import { RelationTypeEnum } from '@kmind/shared';
 
 export type ToolEffect = 'read' | 'write' | 'sensitive';
 
@@ -8,8 +8,6 @@ export interface McpToolDef {
   effect: ToolEffect;
   inputSchema: Record<string, unknown>;
 }
-
-const typeEnum = KnowledgeTypeEnum.options;
 
 /**
  * MCP tool registry with effect classification.
@@ -24,11 +22,70 @@ export const MCP_TOOLS: McpToolDef[] = [
       type: 'object',
       properties: {
         query: { type: 'string' },
-        type: { type: 'string', enum: typeEnum },
+        type: {
+          type: 'string',
+          description:
+            'Asset type id (snake_case). Validated against vault registry; disabled types still match existing cards.',
+        },
         project: { type: 'string' },
         limit: { type: 'number', default: 10 },
       },
       required: ['query'],
+    },
+  },
+  {
+    name: 'kmind_asset_types',
+    description:
+      'List asset type registry (ADR-001): enabled types with scaffold, guidance, requiredSections, rules, classifyPatterns. Call before capture when unsure which type/template to use. Pass includeDisabled=true to see disabled types (old cards remain readable).',
+    effect: 'read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        includeDisabled: {
+          type: 'boolean',
+          default: false,
+          description: 'Include disabled types (not capturable)',
+        },
+        id: {
+          type: 'string',
+          description: 'Optional single type id to describe',
+        },
+      },
+    },
+  },
+  {
+    name: 'kmind_pack',
+    description:
+      'ADR-002 Context Pack: structured recall for Agents (focus card + ego neighborhood + code anchors + problem status). Prefer this over raw search when answering from the vault — returns cards, not LLM-synthesized answers. Pass id (k-…) or query.',
+    effect: 'read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'Exact asset id (k-YYYY-MM-DD-NNN). Wins over query.',
+        },
+        query: {
+          type: 'string',
+          description: 'Hybrid search query when id is omitted',
+        },
+        project: { type: 'string' },
+        type: {
+          type: 'string',
+          description: 'Optional type filter for search resolution',
+        },
+        depth: {
+          type: 'number',
+          default: 1,
+          maximum: 3,
+          description: 'Ego neighborhood hop depth',
+        },
+        neighborCap: {
+          type: 'number',
+          default: 24,
+          description: 'Max neighborhood nodes',
+        },
+      },
     },
   },
   {
@@ -109,9 +166,76 @@ export const MCP_TOOLS: McpToolDef[] = [
     },
   },
   {
+    name: 'kmind_evolution_queue',
+    description:
+      'ADR-002 evolution todo queue (read): open coverage + lint items. Diagnosis only — never auto-captures. Use after scan; Agents should work nextActions then ack via CLI. Pass refresh=true to rescan first.',
+    effect: 'read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        refresh: {
+          type: 'boolean',
+          default: false,
+          description: 'Run coverage+lint scan before returning',
+        },
+        includeClosed: {
+          type: 'boolean',
+          default: false,
+          description: 'Include done/dismissed items',
+        },
+        limit: { type: 'number', default: 50 },
+        project: {
+          type: 'string',
+          description: 'Optional project filter',
+        },
+      },
+    },
+  },
+  {
+    name: 'kmind_capture_suggest',
+    description:
+      'ADR-002 smart-write suggestions (read): duplicates, type, hub related, solves/verifies links, missing anchors, quality preview. Show to human; on confirm merge suggestion.apply into kmind_capture (re-send = accept). Does not write.',
+    effect: 'read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string' },
+        title: { type: 'string' },
+        project: { type: 'string' },
+        type: { type: 'string' },
+        related: { type: 'array', items: { type: 'string' } },
+        links: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              relation: { type: 'string', enum: RelationTypeEnum.options },
+            },
+            required: ['id', 'relation'],
+          },
+        },
+        anchors: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              file: { type: 'string' },
+              symbol: { type: 'string' },
+              kind: { type: 'string' },
+              line: { type: 'number' },
+            },
+            required: ['file'],
+          },
+        },
+      },
+      required: ['content', 'project'],
+    },
+  },
+  {
     name: 'kmind_capture',
     description:
-      'Capture knowledge (write). Depth is DEFAULT — do not wait for user to ask for detail. One topic per card with 实现方式+注意事项+红线 and code anchors for architecture/process. Incremental (project already has assets): MUST related/links to hub/neighbors after kmind_search. Overview: thin + related[] to non-shallow children (gate rejects all-shallow). Success returns coverage report — do not claim complete unless coverage.complete=true.',
+      'Capture knowledge (write). Depth is DEFAULT — do not wait for user to ask for detail. Prefer kmind_capture_suggest first; merge accepted apply fields here. One topic per card with 实现方式+注意事项+红线 and code anchors for architecture/process. Incremental (project already has assets): MUST related/links to hub/neighbors. Overview: thin + related[] to non-shallow children. Success returns coverage — do not claim complete unless coverage.complete=true.',
     effect: 'write',
     inputSchema: {
       type: 'object',
@@ -124,7 +248,7 @@ export const MCP_TOOLS: McpToolDef[] = [
         type: {
           type: 'string',
           description:
-            'One of: problem | outcome | problem_solution | best_practice | architecture_design | tool_usage | pitfall | code_snippet | process_spec',
+            'Asset type id (snake_case). Must be enabled in registry — call kmind_asset_types first. Custom types require explicit type.',
         },
         project: { type: 'string' },
         title: {

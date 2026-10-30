@@ -5,12 +5,20 @@ Canonical Zod schemas live in `packages/shared/src/schemas/`.
 ## Knowledge asset
 
 - ID pattern: `k-YYYY-MM-DD-NNN`
-- Types: `problem` | `outcome` | `problem_solution` | `best_practice` | `architecture_design` | `tool_usage` | `pitfall` | `code_snippet` | `process_spec`
+- Types: snake_case id validated by `KnowledgeTypeIdSchema`; builtins default to `problem` | `outcome` | `problem_solution` | `best_practice` | `architecture_design` | `tool_usage` | `pitfall` | `code_snippet` | `process_spec`. Capture requires type **enabled** in Asset Type Registry (ADR-001). Disabled types: no new capture; existing cards stay readable.
+- `ontologyClass`: short-term compat field (often PascalCase of `type`); product truth is `type`
 - Status: `draft` | `reviewed` | `published` | `deprecated`
 - Markdown frontmatter + body via gray-matter
 - `related[]`: soft `related_to` edges
 - `links[]`: typed edges `{ id, relation }` (`solves` | `verifies` | `results_in` | `part_of` | …)
 - `metadata.codeAnchors[]`: `{ file, symbol?, kind?, line?, projectPath?, confidence }` — code citations (not full source dumps). Parsed from `## 代码锚点` bullets, `path:L42` citations, or capture `anchors` JSON.
+
+## Asset types (ADR-001)
+
+- Builtin defs in `@kmind/core`; vault overlays in `vault/asset-types/*.{yaml,yml,json}` (deep merge by id)
+- Kernel (cannot disable): `problem`, `problem_solution`, `outcome`
+- Fields: `scaffold`, `guidance`, `requiredSections`, whitelist `rules`, optional `classifyPatterns`
+- MCP: `kmind_asset_types` — see [docs/adr/001-asset-type-registry.md](adr/001-asset-type-registry.md)
 
 ## Ontology
 

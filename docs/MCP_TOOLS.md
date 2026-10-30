@@ -5,13 +5,17 @@ Effect levels: `read` | `write` | `sensitive`
 | Tool | Effect | Description |
 |:---|:---|:---|
 | `kmind_search` | read | Hybrid search; pass `k-YYYY-MM-DD-NNN` for exact id lookup; manual captures ranked above session dumps |
+| `kmind_pack` | read | **ADR-002 Context Pack:** focus + ego + anchors + problem status (structured recall for Agents; not LLM answers). Prefer over raw search when answering from vault |
 | `kmind_get` | read | Fetch one asset by exact id (prefer over search when id is known) |
 | `kmind_related` | read | Related assets by graph |
 | `kmind_problem_status` | read | Problem resolution: `open` / `addressed` / `verified` via `solves` + `verifies` |
 | `kmind_coverage` | read | **Depth vs catalog:** `complete` + issues/nextActions for a `project` (+ optional `topic`/`hubId`). Required before claiming「知识已完整」; search hits alone ≠ complete |
 | `kmind_status` | read | Vault health stats |
 | `kmind_ontology_describe` | read | Ontology class/relation info |
-| `kmind_capture` | write | Capture confirmed knowledge (search first; pass `title` + `type` + optional `anchors` / `related` / `links`). Types include `problem` + `outcome`. **Quality gate:** detail + one-topic; overview thin + `related[]` to non-shallow children; outcome requires `links.verifies`. Success returns `coverage` + `claimCompleteAllowed` |
+| `kmind_asset_types` | read | ADR-001 asset type registry: scaffold / guidance / requiredSections / rules (enabled by default; `includeDisabled` / `id`) |
+| `kmind_evolution_queue` | read | **ADR-002 evolution todos:** coverage + lint queue (`refresh` to rescan). Diagnosis only — never auto-captures |
+| `kmind_capture_suggest` | read | **ADR-002 smart write:** duplicates / type / hub / links / anchors / quality preview. Show to human; merge `apply` into capture on confirm. Does not write |
+| `kmind_capture` | write | Capture confirmed knowledge (prefer `kmind_capture_suggest` first; pass `title` + `type` + optional `anchors` / `related` / `links`). **Type** must be enabled in registry. **Quality gate** failure also returns `suggestions`. Success returns `coverage` + `claimCompleteAllowed` |
 | `kmind_graph_query` | sensitive | Cypher-like graph query |
 | `kmind_export` | sensitive | Export vault (`tar.gz` / `git`；可选 project/type；`initGit`) |
 | `kmind_import` | sensitive | Import vault（`merge` + `conflict`: skip/overwrite/rename） |

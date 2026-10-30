@@ -4,6 +4,8 @@ import {
   OntologyRegistry,
   OntologyEvolver,
   loadOntology,
+  createAssetTypeRegistry,
+  type AssetTypeRegistry,
   type Vault,
   type Adapter,
 } from '@kmind/core';
@@ -19,6 +21,7 @@ export interface AppContext {
   store: SqliteStore;
   registry: OntologyRegistry;
   evolver: OntologyEvolver;
+  assetTypes: AssetTypeRegistry;
   adapters: Adapter[];
   json: boolean;
 }
@@ -49,6 +52,7 @@ export async function resolveContext(options: {
   const registry = new OntologyRegistry();
   registry.load(await loadOntology(vault.ontologyDir));
   const evolver = new OntologyEvolver(vault.ontologyDir, registry);
+  const assetTypes = await createAssetTypeRegistry(vault.assetTypesDir);
   const adapters: Adapter[] = [
     new ClaudeCodeAdapter(),
     new CursorAdapter(),
@@ -61,6 +65,7 @@ export async function resolveContext(options: {
     store,
     registry,
     evolver,
+    assetTypes,
     adapters,
     json: options.json ?? false,
   };

@@ -1,5 +1,6 @@
 import type { KnowledgeAsset, KnowledgeType } from '@kmind/shared';
-import { readCodeAnchors } from '../../compiler/code-anchors.js';
+import { assetHasCodeAnchors } from '../../compiler/code-anchors.js';
+import { isOverviewTitle } from '../../compiler/capture-quality.js';
 import type { HealthIssue } from './expiry.js';
 
 const ANCHOR_TYPES: ReadonlySet<KnowledgeType> = new Set([
@@ -9,6 +10,8 @@ const ANCHOR_TYPES: ReadonlySet<KnowledgeType> = new Set([
 
 /**
  * Low-severity lint: architecture / snippet assets should cite code anchors.
+ * Accepts metadata.codeAnchors OR body ## 代码锚点 / path:line (same as capture gate).
+ * Overview hubs and process_spec are exempt (doc/nav cards).
  */
 export function checkMissingCodeAnchors(
   assets: KnowledgeAsset[],
@@ -19,13 +22,13 @@ export function checkMissingCodeAnchors(
   for (const a of assets) {
     if (!ANCHOR_TYPES.has(a.type)) continue;
     if (a.status === 'deprecated') continue;
-    const anchors = readCodeAnchors(a.metadata);
-    if (anchors.length > 0) continue;
+    if (isOverviewTitle(a.title)) continue;
+    if (assetHasCodeAnchors(a.body, a.metadata)) continue;
     issues.push({
       rule: 'missing_code_anchors',
       severity: 'low',
       assetId: a.id,
-      message: `${a.type} has no codeAnchors (add ## 代码锚点 or path:line citations)`,
+      message: `${a.type} has no codeAnchors (add ## 代码锚点 or path:line; compile/reindex writes metadata)`,
     });
   }
   return issues;

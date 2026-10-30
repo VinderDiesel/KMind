@@ -44,12 +44,36 @@ export const KMindConfigSchema = z.object({
     .record(
       z.object({
         enabled: z.boolean().default(true),
+        /**
+         * 5-field cron (min hour dom month dow). Empty/absent = not auto-scheduled.
+         */
+        schedule: z.string().optional(),
         config: z.record(z.unknown()).default({}),
       }),
     )
     .default({}),
+  /**
+   * Long-running `kmind schedule start` daemon settings.
+   * Per-adapter cron lives under `adapters.<name>.schedule`.
+   */
+  schedule: z
+    .object({
+      /** When false, daemon ticks but skips due runs (process may still be up). */
+      enabled: z.boolean().default(true),
+      /** Daemon poll interval in seconds. */
+      tickSeconds: z.number().int().min(10).max(300).default(30),
+      /** If a previous maintenance run is still in progress. */
+      overlap: z.enum(['skip']).default('skip'),
+      /**
+       * After adapter maintenance (and on healthCheck.schedule), refresh
+       * ADR-002 evolution queue (coverage + lint todos). Never auto-captures.
+       */
+      evolutionScan: z.boolean().default(true),
+    })
+    .default({}),
   healthCheck: z
     .object({
+      /** Cron for evolution/lint scan when daemon is running (ADR-002). */
       schedule: z.string().default('0 9 * * 1'),
       expiryDays: z.number().default(30),
       /** Warn when architecture_design / code_snippet lack codeAnchors. */

@@ -11,6 +11,7 @@ export async function cmdHook(ctx: AppContext, event: string): Promise<void> {
     sqlite: ctx.store,
     registry: ctx.registry,
     evolver: ctx.evolver,
+    assetTypes: ctx.assetTypes,
     // Still pass adapters; pipeline honors capture.autoCapture (default false).
     adapters: ctx.adapters,
   });

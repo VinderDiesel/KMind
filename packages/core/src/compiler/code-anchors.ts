@@ -129,3 +129,34 @@ export function withCodeAnchorsMetadata(
   if (anchors.length === 0) return { ...metadata };
   return { ...metadata, codeAnchors: anchors };
 }
+
+/**
+ * Ensure metadata.codeAnchors includes anchors parsed from body (+ existing).
+ * Used by compile, reindex/backfill so UI/health match ## 代码锚点.
+ */
+export function enrichAssetCodeAnchors<
+  T extends { body: string; metadata?: Record<string, unknown> },
+>(asset: T): T {
+  const existing = readCodeAnchors(asset.metadata);
+  const fromBody = extractCodeAnchors(asset.body, existing);
+  if (fromBody.length === 0 && existing.length === 0) return asset;
+  const merged =
+    fromBody.length > 0
+      ? fromBody
+      : existing.map((a) => stripUndefinedKeys(a));
+  return {
+    ...asset,
+    metadata: withCodeAnchorsMetadata(asset.metadata ?? {}, merged),
+  };
+}
+
+/**
+ * True when metadata or body cites code anchors (YAML-safe metadata preferred).
+ */
+export function assetHasCodeAnchors(
+  body: string,
+  metadata?: Record<string, unknown>,
+): boolean {
+  if (readCodeAnchors(metadata).length > 0) return true;
+  return extractCodeAnchors(body).length > 0;
+}

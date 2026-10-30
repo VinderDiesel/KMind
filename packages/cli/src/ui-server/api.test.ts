@@ -113,6 +113,65 @@ describe('handleUiApi', () => {
     expect(res.status).toBe(405);
   });
 
+  it('given coverage without project when GET then 400', async () => {
+    const res = await handleUiApi(
+      { vault, store },
+      'GET',
+      '/api/coverage',
+      new URLSearchParams(),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('given coverage with project when GET then returns summary', async () => {
+    const b = createKnowledgeAsset({
+      id: 'k-2026-01-01-011',
+      title: '广银 P0 护栏',
+      type: 'architecture_design',
+      project: 'meta-brain',
+      body: [
+        '## 实现方式',
+        '1. 在 `src/A.java` 的 `foo` 落地。',
+        '2. 命令 `pnpm test`',
+        '## 注意事项',
+        '- 失败时看 Trace',
+        '## 红线规避',
+        '- 禁止跳过澄清',
+        '## 代码锚点',
+        '- `src/A.java` · `foo` · method',
+        '',
+        '额外核对：对账与回归样例表登记，避免目录级空文。'.repeat(8),
+      ].join('\n'),
+    });
+    const a = createKnowledgeAsset({
+      id: 'k-2026-01-01-010',
+      title: '广银落地总览',
+      type: 'architecture_design',
+      project: 'meta-brain',
+      related: [b.id],
+      body: '## 红线规避\n- 禁止空总览\n\n导航',
+    });
+    await store.upsertAsset(b);
+    await store.upsertAsset(a);
+    const res = await handleUiApi(
+      { vault, store },
+      'GET',
+      '/api/coverage',
+      new URLSearchParams({ project: 'meta-brain', topic: '广银' }),
+    );
+    expect(res.status).toBe(200);
+    const body = res.body as {
+      project: string;
+      complete: boolean;
+      summary: string;
+      nextActions: string[];
+    };
+    expect(body.project).toBe('meta-brain');
+    expect(typeof body.complete).toBe('boolean');
+    expect(body.summary.length).toBeGreaterThan(0);
+    expect(Array.isArray(body.nextActions)).toBe(true);
+  });
+
   it('given graph when GET then returns global mode nodes', async () => {
     const res = await handleUiApi(
       { vault, store },

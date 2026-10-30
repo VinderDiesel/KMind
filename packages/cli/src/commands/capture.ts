@@ -11,7 +11,7 @@ import {
 import {
   AssetLinkSchema,
   CodeAnchorSchema,
-  KnowledgeTypeEnum,
+  KnowledgeTypeIdSchema,
   KMindError,
 } from '@kmind/shared';
 import type { AppContext } from '../context.js';
@@ -40,8 +40,26 @@ export async function cmdCapture(
   const title = sanitizeTitle(
     options.title ?? content.split('\n')[0] ?? 'untitled',
   );
-  const typeParse = KnowledgeTypeEnum.safeParse(options.type ?? 'best_practice');
+  const typeParse = KnowledgeTypeIdSchema.safeParse(
+    options.type ?? 'best_practice',
+  );
   const type = typeParse.success ? typeParse.data : 'best_practice';
+  let typeDef;
+  try {
+    typeDef = ctx.assetTypes.assertCapturable(type);
+  } catch (err) {
+    fail(
+      err instanceof KMindError
+        ? err
+        : new KMindError(String(err), {
+            category: 'CAPTURE_ERROR',
+            severity: 'high',
+            retryable: false,
+            suggestion: 'kmind_asset_types / vault asset-types',
+          }),
+      ctx.json,
+    );
+  }
   const project = (options.project ?? '').trim();
   if (!project || project === 'global') {
     fail(
@@ -66,6 +84,7 @@ export async function cmdCapture(
     hubIds: peers
       .filter((a) => /总览|概览|索引|overview/i.test(a.title))
       .map((a) => a.id),
+    typeDef,
   });
   const gateReasons = [...quality.reasons];
   if (isOverviewTitle(title) && related && related.length > 0) {
@@ -112,6 +131,7 @@ export async function cmdCapture(
     sqlite: ctx.store,
     registry: ctx.registry,
     evolver: ctx.evolver,
+    assetTypes: ctx.assetTypes,
   });
   // Incremental: only the new raw file (and changed hashes) compile; ids continue from vault max.
   const result = await pipeline.run({

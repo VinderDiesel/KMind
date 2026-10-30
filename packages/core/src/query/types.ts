@@ -1,8 +1,10 @@
 import type {
+  ContextPack,
   KnowledgeAsset,
   KnowledgeStatus,
   KnowledgeType,
 } from '@kmind/shared';
+import type { BuildContextPackOptions } from './context-pack.js';
 
 export interface SearchQuery {
   query: string;
@@ -35,4 +37,6 @@ export interface QueryEngine {
     topic?: string;
     hubId?: string;
   }): Promise<unknown>;
+  /** ADR-002 structured recall pack for Agents (no LLM summary). */
+  pack(opts: BuildContextPackOptions): Promise<ContextPack>;
 }

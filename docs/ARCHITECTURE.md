@@ -1,5 +1,7 @@
 # Architecture
 
+KMind is a local-first **intelligence flywheel** (smart write → structured recall → measurable evolution), not a plain file dump. See [ADR-002](adr/002-intelligence-flywheel.md).
+
 KMind is a local-first knowledge system:
 
 ```
@@ -18,11 +20,13 @@ CLI / MCP Server / UI HTTP → @kmind/core → Vault (~/.kmind)
 
 - `storage` — Vault, Markdown, SQLite, blob
 - `ontology` — load / validate / evolve
+- `asset-types` — ADR-001 data-driven type registry (builtin ∪ vault deep merge; templates + quality rules)
 - `compiler` — capture → classify → **confidence gate** → map → graph → embed → index
   - Adapter raw below `capture.minConfidence` stays `pending` (`gated`, no asset)
   - Manual / `typeHint` captures bypass the gate
-- `query` — fulltext / structured / graph / semantic / hybrid / ego
+- `query` — fulltext / structured / graph / semantic / hybrid / ego / **context-pack** (`kmind_pack`)
 - `health` — lint rules
+- `schedule` / **evolution-queue** — cron maintenance + ADR-002 coverage/lint todo queue (`audit/evolution-queue.json`)
 - `migration` — export / import
 
 ## Local UI (`kmind ui`)

@@ -56,11 +56,13 @@ kmind_coverage  project=<project>  topic=<主题>
 
 ## 增量写入（单条结论）— 默认协议
 
-1. **`kmind_search`**（`project` + 主题关键词）→ 找到总览/邻卡  
-2. **判重**：同主题则更新语义（新卡 + `related`/`supersedes` 点名旧 id）  
-3. **深挖（强制）**：涉及代码则 Codegraph/读码  
-4. **`kmind_capture`**：实现+注意+红线+锚点；`related`/`links.part_of` 挂图  
-5. **验收**：`kmind_related` 有边；必要时对主题再跑 `kmind_coverage`  
+1. **`kmind_asset_types`**（可选但推荐）→ 确认 `type` + 读 `guidance` / `scaffold`（勿手抄死枚举）  
+2. **召回**：答库内问题优先 **`kmind_pack`**（focus+邻域+锚点）；仅列候选时用 `kmind_search`  
+3. **判重**：同主题则更新语义（新卡 + `related`/`supersedes` 点名旧 id）  
+4. **深挖（强制）**：涉及代码则 Codegraph/读码  
+5. **`kmind_capture_suggest`**（推荐）→ 展示 duplicates/type/hub/links；人确认后把 `apply` 回灌  
+6. **`kmind_capture`**：按 guidance + 已确认字段；实现+注意+红线+锚点；挂图  
+7. **验收**：`kmind_related` 有边；必要时对主题再跑 `kmind_coverage`  
 
 ## 何时写入
 

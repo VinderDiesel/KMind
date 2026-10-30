@@ -8,6 +8,7 @@ import { hybridSearch } from './hybrid.js';
 import type { QueryEngine, SearchQuery, SearchResult } from './types.js';
 import { getProblemStatus } from './problem-status.js';
 import { assessProjectCoverage } from './coverage.js';
+import { buildContextPack } from './context-pack.js';
 
 /**
  * Create a hybrid query engine bound to a vault.
@@ -96,6 +97,10 @@ export function createQueryEngine(
         limit: 100_000,
       });
       return assessProjectCoverage(assets, opts);
+    },
+
+    async pack(opts) {
+      return buildContextPack(store, opts);
     },
   };
 }

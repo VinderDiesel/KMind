@@ -9,7 +9,7 @@ import type {
 import {
   AssetLinkSchema,
   CodeAnchorSchema,
-  KnowledgeTypeEnum,
+  KnowledgeTypeIdSchema,
   SessionRecordSchema,
 } from '@kmind/shared';
 import type { Adapter } from '../adapters/types.js';
@@ -213,7 +213,7 @@ function extractMarkdownTitle(text: string): string | undefined {
 
 function parseTypeHint(raw: unknown): KnowledgeType | undefined {
   if (typeof raw !== 'string') return undefined;
-  const parsed = KnowledgeTypeEnum.safeParse(raw.trim());
+  const parsed = KnowledgeTypeIdSchema.safeParse(raw.trim());
   return parsed.success ? parsed.data : undefined;
 }
 

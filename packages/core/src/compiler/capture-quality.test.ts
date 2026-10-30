@@ -55,6 +55,26 @@ T-Box / A-Box…
 `;
 
 describe('assessCaptureQuality', () => {
+  it('given custom typeDef requiredSections when missing then fail', () => {
+    const r = assessCaptureQuality(
+      '## 其它\n\n' + 'x'.repeat(400) + '\n\n```\ncode block here enough\n```\n\n- step detail item here\n',
+      'runbook',
+      {
+        typeDef: {
+          id: 'runbook',
+          enabled: true,
+          scaffold: '',
+          guidance: '',
+          requiredSections: ['步骤'],
+          rules: [{ minBodyChars: 100 }],
+          classifyPatterns: [],
+        },
+      },
+    );
+    expect(r.ok).toBe(false);
+    expect(r.reasons.some((x) => x.includes('## 步骤'))).toBe(true);
+  });
+
   it('given detailed single-topic body when assess then ok', () => {
     const r = assessCaptureQuality(DETAILED_FEATURE, 'architecture_design');
     expect(r.ok).toBe(true);

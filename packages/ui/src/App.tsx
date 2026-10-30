@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   fetchAsset,
+  fetchCoverage,
   fetchEgo,
   fetchEgoHealth,
   fetchGlobalGraph,
@@ -10,6 +11,7 @@ import {
   searchAssets,
   type AssetDetail,
   type CodeAnchor,
+  type CoverageSummary,
   type EgoGraph,
   type HealthIssue,
   type HealthSummary,
@@ -17,8 +19,11 @@ import {
   type VaultStatus,
 } from './api';
 import { GraphView } from './GraphView';
+import { FocusMarkdown } from './FocusMarkdown';
+import { RELATION_COLOR, RELATION_LEGEND } from './relationColors';
 
 type ViewMode = 'ego' | 'global';
+type HudTab = 'read' | 'extend' | 'health';
 
 function readFocusFromUrl(): string | null {
   const v = new URLSearchParams(window.location.search).get('focus');
@@ -33,7 +38,7 @@ function writeFocusToUrl(id: string | null): void {
 }
 
 /**
- * KMind local UI shell: search → 3D ego/global → health HUD.
+ * KMind local UI: search → read body → extend (Hop1) → optional graph/health.
  */
 export function App() {
   const [query, setQuery] = useState('');
@@ -41,10 +46,13 @@ export function App() {
   const [recent, setRecent] = useState<SearchHit[]>([]);
   const [showHits, setShowHits] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(() => readFocusFromUrl());
-  const [depth, setDepth] = useState(2);
+  const [depth, setDepth] = useState(1);
   const [mode, setMode] = useState<ViewMode>(() =>
     readFocusFromUrl() ? 'ego' : 'global',
   );
+  const [hudTab, setHudTab] = useState<HudTab>('read');
+  const [showGraph, setShowGraph] = useState(false);
+  const [showFarIssues, setShowFarIssues] = useState(false);
   const [projectFilter, setProjectFilter] = useState('');
   const [graph, setGraph] = useState<EgoGraph | null>(null);
   const [egoIssues, setEgoIssues] = useState<HealthIssue[]>([]);
@@ -55,6 +63,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [focusAsset, setFocusAsset] = useState<AssetDetail | null>(null);
+  const [coverage, setCoverage] = useState<CoverageSummary | null>(null);
 
   useEffect(() => {
     void fetchStatus()
@@ -122,6 +131,29 @@ export function App() {
   }, [mode, focusId, depth, projectFilter, loadFocus, loadGlobal]);
 
   useEffect(() => {
+    if (mode !== 'ego' || !focusAsset?.project) {
+      setCoverage(null);
+      return;
+    }
+    const topic = guessTopic(focusAsset.title);
+    let cancelled = false;
+    void fetchCoverage({
+      project: focusAsset.project,
+      ...(topic ? { topic } : {}),
+      hubId: focusAsset.id,
+    })
+      .then((r) => {
+        if (!cancelled) setCoverage(r);
+      })
+      .catch(() => {
+        if (!cancelled) setCoverage(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, focusAsset?.id, focusAsset?.project, focusAsset?.title]);
+
+  useEffect(() => {
     if (!query.trim()) {
       setHits([]);
       return;
@@ -155,6 +187,43 @@ export function App() {
   const topRule =
     Object.entries(egoByRule).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 
+  const focusIssues = useMemo(
+    () =>
+      graph
+        ? egoIssues.filter((i) => i.assetId === graph.focusId)
+        : [],
+    [egoIssues, graph],
+  );
+
+  const hop1Issues = useMemo(() => {
+    if (!graph) return [];
+    const hop1 = new Set(
+      graph.nodes.filter((n) => n.hop === 1).map((n) => n.id),
+    );
+    return egoIssues.filter(
+      (i) => i.assetId && (i.assetId === graph.focusId || hop1.has(i.assetId)),
+    );
+  }, [egoIssues, graph]);
+
+  /** Focus card quality — not neighborhood noise. */
+  const focusQuality = useMemo(() => {
+    let score = 100;
+    for (const i of focusIssues) {
+      if (i.severity === 'high') score -= 25;
+      else if (i.severity === 'medium') score -= 15;
+      else score -= 8;
+    }
+    if (
+      focusNode &&
+      (focusNode.type === 'architecture_design' ||
+        focusNode.type === 'code_snippet') &&
+      !(focusNode.hasCodeAnchors || focusAnchors.length > 0)
+    ) {
+      score -= 20;
+    }
+    return Math.max(0, Math.min(100, score));
+  }, [focusIssues, focusNode, focusAnchors.length]);
+
   const neighborhood = useMemo(() => {
     if (!graph || mode !== 'ego') return null;
     const byHop: Record<number, number> = {};
@@ -163,19 +232,87 @@ export function App() {
       byHop[n.hop] = (byHop[n.hop] ?? 0) + 1;
       byType[n.type] = (byType[n.type] ?? 0) + 1;
     }
-    const issueFlagged = graph.nodes.filter((n) => n.hasHealthIssue).length;
-    const integrity = Math.max(
-      0,
-      Math.round(100 - egoIssues.length * 12 - issueFlagged * 8),
-    );
+    const scoped = depth <= 1 ? hop1Issues : egoIssues;
+    const issueFlagged = graph.nodes.filter((n) => {
+      if (depth <= 1 && n.hop > 1) return false;
+      return n.hasHealthIssue;
+    }).length;
+    let integrity = 100;
+    for (const i of scoped) {
+      if (i.severity === 'high') integrity -= 12;
+      else if (i.severity === 'medium') integrity -= 6;
+      else integrity -= 2;
+    }
+    integrity = Math.max(0, Math.round(integrity - issueFlagged * 3));
     return {
       byHop,
       byType: Object.entries(byType).sort((a, b) => b[1] - a[1]),
       linkCount: graph.links.length,
       issueFlagged,
       integrity,
+      scopedIssueCount: scoped.length,
     };
-  }, [graph, egoIssues.length, mode]);
+  }, [graph, egoIssues, hop1Issues, mode, depth]);
+
+  /** Hop1 neighbors grouped by relation from/to focus. */
+  const extendGroups = useMemo(() => {
+    if (!graph?.focusId) return [];
+    const hop1 = graph.nodes.filter((n) => n.hop === 1);
+    const byId = new Map(hop1.map((n) => [n.id, n]));
+    const groups = new Map<string, Array<{ id: string; title: string; type: string }>>();
+    const push = (rel: string, id: string) => {
+      const n = byId.get(id);
+      if (!n) return;
+      const list = groups.get(rel) ?? [];
+      if (!list.some((x) => x.id === id)) {
+        list.push({ id: n.id, title: n.title, type: n.type });
+      }
+      groups.set(rel, list);
+    };
+    for (const link of graph.links) {
+      if (link.source === graph.focusId && byId.has(link.target)) {
+        push(link.relationType || 'related_to', link.target);
+      } else if (link.target === graph.focusId && byId.has(link.source)) {
+        push(link.relationType || 'related_to', link.source);
+      }
+    }
+    for (const n of hop1) {
+      if (![...groups.values()].some((list) => list.some((x) => x.id === n.id))) {
+        push('related_to', n.id);
+      }
+    }
+    const order = [
+      'part_of',
+      'derives_from',
+      'supersedes',
+      'solves',
+      'verifies',
+      'results_in',
+      'related_to',
+      'contradicts',
+    ];
+    return order
+      .filter((k) => (groups.get(k)?.length ?? 0) > 0)
+      .map((k) => ({ relation: k, items: groups.get(k)! }));
+  }, [graph]);
+
+  const linkTypeCounts = useMemo(() => {
+    if (!graph) return [];
+    const counts = new Map<string, number>();
+    for (const l of graph.links) {
+      const rel = l.relationType || 'related_to';
+      counts.set(rel, (counts.get(rel) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [graph]);
+
+  const farIssues = useMemo(() => {
+    if (!graph) return [];
+    const near = new Set(
+      graph.nodes.filter((n) => n.hop <= 1).map((n) => n.id),
+    );
+    return egoIssues.filter((i) => i.assetId && !near.has(i.assetId));
+  }, [egoIssues, graph]);
 
   const vaultRuleEntries = useMemo(() => {
     if (!health) return [];
@@ -205,6 +342,9 @@ export function App() {
   const enterEgo = (id: string) => {
     setMode('ego');
     setFocusId(id);
+    setHudTab('read');
+    setShowGraph(false);
+    setShowFarIssues(false);
     writeFocusToUrl(id);
   };
 
@@ -313,7 +453,7 @@ export function App() {
         </div>
       </header>
 
-      {graph && mode === 'ego' && (
+      {graph && mode === 'ego' && showGraph && (
         <div className="shell-legend" aria-hidden>
           <span>
             <i className="dot hop0" /> hop 0
@@ -325,11 +465,19 @@ export function App() {
             <i className="dot hop2" /> hop 2+
           </span>
           <span>
-            <i className="dot problem" /> problem
+            <i className="dot code-anchor" /> anchors
           </span>
-          <span>
-            <i className="dot code-anchor" /> code anchors
-          </span>
+          {RELATION_LEGEND.filter((r) =>
+            linkTypeCounts.some(([k]) => k === r),
+          ).map((rel) => (
+            <span key={rel}>
+              <i
+                className="dot"
+                style={{ background: RELATION_COLOR[rel], color: RELATION_COLOR[rel] }}
+              />{' '}
+              {rel}
+            </span>
+          ))}
         </div>
       )}
       {graph && mode === 'global' && (
@@ -346,11 +494,40 @@ export function App() {
           <span>
             <i className="dot health" /> health
           </span>
+          <span className="legend-note">Global · 全库巡检</span>
         </div>
       )}
 
-      <div className="stage">
-        {graph ? (
+      <div
+        className={
+          mode === 'ego' && focusAsset && !showGraph
+            ? 'stage stage-compact'
+            : 'stage'
+        }
+      >
+        {mode === 'ego' && focusAsset && !showGraph ? (
+          <div className="reader-main" aria-label="知识正文">
+            <header className="reader-head">
+              <h1>{focusAsset.title}</h1>
+              <p className="reader-meta">
+                {focusAsset.type} · {focusAsset.project} · {focusAsset.id}
+              </p>
+              <div className="reader-actions">
+                <button type="button" onClick={() => setShowGraph(true)}>
+                  显示图谱
+                </button>
+                <button type="button" onClick={() => setHudTab('extend')}>
+                  延伸阅读
+                </button>
+              </div>
+            </header>
+            {focusAsset.body ? (
+              <FocusMarkdown source={focusAsset.body} />
+            ) : (
+              <p className="warn">无正文</p>
+            )}
+          </div>
+        ) : graph ? (
           <GraphView
             graph={graph}
             mode={mode}
@@ -361,20 +538,27 @@ export function App() {
         ) : (
           <div className="empty">
             <div>
-              <h1>定位一个知识焦点</h1>
+              <h1>
+                {mode === 'global' ? '全库图谱巡检' : '搜索并打开一张知识'}
+              </h1>
               <p>
-                用顶部命令条搜索资产进入 Ego 邻域，或切换 Global 查看全库图谱。右侧
-                HUD 显示健康告警。
+                {mode === 'global'
+                  ? 'Global 模式用于 vault 健康与全图浏览；要读正文请切回 Ego 并搜索焦点卡。'
+                  : 'Ego 阅读模式：主栏正文 → 侧栏延伸/健康；图谱按需打开（默认 Hop1）。'}
               </p>
             </div>
           </div>
         )}
       </div>
 
-      <aside className="hud" aria-label="健康与焦点面板">
+      <aside
+        className="hud"
+        aria-label={mode === 'global' ? '全库巡检面板' : '阅读与延伸面板'}
+      >
         {(mode === 'global' || !graph) && health && (
           <section className="panel vault-health-panel">
-            <h2>Vault health</h2>
+            <h2>Vault 巡检</h2>
+            <p className="health-status">Global · 运维视角（非单卡阅读）</p>
             <div className="summary-grid">
               <div>
                 integrity
@@ -476,184 +660,367 @@ export function App() {
 
         {mode === 'ego' && graph && (
           <>
-            <section className="panel">
-              <h2>Focus</h2>
-              <p className="focus-title">{focusNode?.title ?? graph.focusId}</p>
-              <div className="kv">
-                <span>id</span>
-                <b>{graph.focusId}</b>
-              </div>
-              <div className="kv">
-                <span>type</span>
-                <b>{focusNode?.type ?? '—'}</b>
-              </div>
-              <div className="kv">
-                <span>nodes</span>
-                <b>
-                  {graph.nodes.length}
-                  {graph.truncated ? ` / ${graph.totalCandidates}` : ''}
-                </b>
-              </div>
-              <div className="kv">
-                <span>code anchors</span>
-                <b>{focusAnchors.length}</b>
-              </div>
-              {focusAnchors.length > 0 && (
-                <ul className="anchor-list">
-                  {focusAnchors.slice(0, 12).map((a, i) => (
-                    <li key={`${a.file}-${a.symbol ?? ''}-${a.line ?? i}`}>
-                      <code>
-                        {a.file}
-                        {a.line != null ? `:${a.line}` : ''}
-                      </code>
-                      {(a.symbol || a.kind) && (
-                        <span>
-                          {[a.symbol, a.kind].filter(Boolean).join(' · ')}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {focusAnchors.length > 0 && (
-                <p className="anchor-hint">
-                  影响面请用本机 Codegraph：
-                  <code>codegraph_explore</code>（需项目{' '}
-                  <code>.codegraph/</code>）
-                </p>
-              )}
-              <div className="depth-row" role="group" aria-label="跳数深度">
-                {[1, 2, 3].map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    className={depth === d ? 'active' : ''}
-                    onClick={() => setDepth(d)}
-                  >
-                    hop {d}
-                  </button>
-                ))}
-              </div>
-              {graph.truncated && (
-                <p className="warn">
-                  邻域已截断至 {graph.nodeCap} 节点。降低 hop 或更换更窄的焦点。
-                </p>
-              )}
-              {loading && <p className="warn">加载中…</p>}
-            </section>
+            <div className="hud-tabs" role="tablist" aria-label="侧栏模式">
+              {(
+                [
+                  ['read', '阅读'],
+                  ['extend', '延伸'],
+                  ['health', '健康'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={hudTab === id}
+                  className={hudTab === id ? 'active' : ''}
+                  onClick={() => setHudTab(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
-            <section className="panel" style={{ flex: 1, minHeight: 0 }}>
-              <h2>Focus health</h2>
-              {neighborhood && (
-                <>
-                  <div className="summary-grid">
-                    <div>
-                      integrity
-                      <strong
-                        className={
-                          neighborhood.integrity >= 90
-                            ? 'ok'
-                            : neighborhood.integrity >= 60
-                              ? 'warn-val'
-                              : 'bad'
-                        }
-                      >
-                        {neighborhood.integrity}%
-                      </strong>
-                    </div>
-                    <div>
-                      alerts
-                      <strong
-                        className={egoIssues.length === 0 ? 'ok' : 'bad'}
-                      >
-                        {egoIssues.length}
-                      </strong>
-                    </div>
-                  </div>
-
-                  <div className="meter" aria-hidden>
-                    <div
-                      className={`meter-fill ${
-                        neighborhood.integrity >= 90
+            {hudTab === 'read' && (
+              <section className="panel" style={{ flex: 1, minHeight: 0 }}>
+                <h2>Focus</h2>
+                <p className="focus-title">
+                  {focusNode?.title ?? graph.focusId}
+                </p>
+                <div className="summary-grid">
+                  <div>
+                    focus
+                    <strong
+                      className={
+                        focusQuality >= 90
                           ? 'ok'
-                          : neighborhood.integrity >= 60
+                          : focusQuality >= 60
                             ? 'warn-val'
                             : 'bad'
-                      }`}
-                      style={{ width: `${neighborhood.integrity}%` }}
-                    />
+                      }
+                    >
+                      {focusQuality}%
+                    </strong>
                   </div>
-
-                  <p className="health-status">
-                    {egoIssues.length === 0
-                      ? '邻域完整 · 无健康告警'
-                      : `top rule · ${topRule ?? '—'}`}
-                  </p>
-
-                  <h3 className="subhead">邻域构成</h3>
-                  <ul className="hop-bars">
-                    {[0, 1, 2, 3]
-                      .filter((h) => (neighborhood.byHop[h] ?? 0) > 0)
-                      .map((h) => {
-                        const count = neighborhood.byHop[h] ?? 0;
-                        const pct = Math.round(
-                          (count / graph.nodes.length) * 100,
-                        );
-                        return (
-                          <li key={h}>
-                            <span className={`hop-label hop-${h}`}>hop {h}</span>
-                            <div className="bar-track">
-                              <div
-                                className={`bar-fill hop-${h}`}
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                            <b>{count}</b>
-                          </li>
-                        );
-                      })}
+                  <div>
+                    anchors
+                    <strong>
+                      {focusAnchors.length ||
+                        (focusNode?.hasCodeAnchors ? 'body' : 0)}
+                    </strong>
+                  </div>
+                </div>
+                <p className="health-status">
+                  本卡完整度（不含二跳邻域噪声）
+                </p>
+                <div className="kv">
+                  <span>type</span>
+                  <b>{focusNode?.type ?? '—'}</b>
+                </div>
+                <div className="kv">
+                  <span>id</span>
+                  <b>{graph.focusId}</b>
+                </div>
+                {focusAnchors.length > 0 && (
+                  <ul className="anchor-list">
+                    {focusAnchors.slice(0, 8).map((a, i) => (
+                      <li key={`${a.file}-${a.symbol ?? ''}-${a.line ?? i}`}>
+                        <code>
+                          {a.file}
+                          {a.line != null ? `:${a.line}` : ''}
+                        </code>
+                        {(a.symbol || a.kind) && (
+                          <span>
+                            {[a.symbol, a.kind].filter(Boolean).join(' · ')}
+                          </span>
+                        )}
+                      </li>
+                    ))}
                   </ul>
+                )}
+                {showGraph && (
+                  <button
+                    type="button"
+                    className="linkish"
+                    onClick={() => setShowGraph(false)}
+                  >
+                    返回正文阅读
+                  </button>
+                )}
+                {!showGraph && focusAsset?.body && (
+                  <p className="anchor-hint">正文在左侧主栏；此处为摘要与锚点。</p>
+                )}
+                {loading && <p className="warn">加载中…</p>}
+              </section>
+            )}
 
-                  <div className="kv">
-                    <span>links</span>
-                    <b>{neighborhood.linkCount}</b>
-                  </div>
-                  <div className="kv">
-                    <span>flagged nodes</span>
-                    <b>{neighborhood.issueFlagged}</b>
-                  </div>
-                  {neighborhood.byType.slice(0, 4).map(([type, n]) => (
-                    <div className="kv" key={type}>
-                      <span>{type}</span>
-                      <b>{n}</b>
-                    </div>
+            {hudTab === 'extend' && (
+              <section className="panel" style={{ flex: 1, minHeight: 0 }}>
+                <h2>延伸阅读</h2>
+                <p className="health-status">Hop1 · 按关系分组</p>
+                <div className="depth-row" role="group" aria-label="跳数深度">
+                  {[1, 2, 3].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      className={depth === d ? 'active' : ''}
+                      onClick={() => setDepth(d)}
+                    >
+                      hop {d}
+                    </button>
                   ))}
-                </>
-              )}
+                </div>
+                {extendGroups.length === 0 && (
+                  <p className="warn">一度邻居为空；可提高 hop 或检查 related。</p>
+                )}
+                {extendGroups.map((g) => (
+                  <div key={g.relation} className="extend-group">
+                    <h3 className="subhead">{g.relation}</h3>
+                    <ul className="extend-list">
+                      {g.items.map((item) => (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHudTab('read');
+                              setShowGraph(false);
+                              enterEgo(item.id);
+                            }}
+                          >
+                            <strong>{item.title}</strong>
+                            <em>
+                              {item.type} · {item.id}
+                            </em>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </section>
+            )}
 
-              {egoIssues.length > 0 && (
-                <ul className="issue-list">
-                  {egoIssues.slice(0, 40).map((issue, i) => (
-                    <li key={`${issue.rule}-${issue.assetId ?? i}-${i}`}>
-                      <div
-                        className={`rule ${issue.severity === 'high' ? 'sev-high' : ''}`}
-                      >
-                        {issue.rule} · {issue.severity}
+            {hudTab === 'health' && (
+              <section className="panel" style={{ flex: 1, minHeight: 0 }}>
+                <h2>健康 · 覆盖</h2>
+                {coverage && (
+                  <div className="coverage-box">
+                    <div className="summary-grid">
+                      <div>
+                        coverage
+                        <strong className={coverage.complete ? 'ok' : 'bad'}>
+                          {coverage.complete ? '合格' : '未完成'}
+                        </strong>
                       </div>
-                      <div>{issue.message}</div>
-                      {issue.assetId && issue.assetId !== graph.focusId && (
-                        <button
-                          type="button"
-                          onClick={() => enterEgo(issue.assetId!)}
+                      <div>
+                        issues
+                        <strong>{coverage.issueCount}</strong>
+                      </div>
+                    </div>
+                    <p className="health-status">{coverage.summary}</p>
+                    {coverage.nextActions.length > 0 && (
+                      <>
+                        <h3 className="subhead">next actions</h3>
+                        <ul className="action-list">
+                          {coverage.nextActions.slice(0, 5).map((a) => (
+                            <li key={a}>{a}</li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    {coverage.shallow.length > 0 && (
+                      <>
+                        <h3 className="subhead">浅卡</h3>
+                        <ul className="extend-list">
+                          {coverage.shallow.slice(0, 5).map((s) => (
+                            <li key={s.id}>
+                              <button
+                                type="button"
+                                onClick={() => enterEgo(s.id)}
+                              >
+                                <strong>{s.title}</strong>
+                                <em>
+                                  {s.chars} 字 · {s.id}
+                                </em>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                )}
+                {neighborhood && (
+                  <>
+                    <div className="summary-grid">
+                      <div>
+                        focus
+                        <strong
+                          className={
+                            focusQuality >= 90
+                              ? 'ok'
+                              : focusQuality >= 60
+                                ? 'warn-val'
+                                : 'bad'
+                          }
                         >
-                          → {issue.assetId}
+                          {focusQuality}%
+                        </strong>
+                      </div>
+                      <div>
+                        邻域
+                        <strong
+                          className={
+                            neighborhood.integrity >= 90
+                              ? 'ok'
+                              : neighborhood.integrity >= 60
+                                ? 'warn-val'
+                                : 'bad'
+                          }
+                        >
+                          {neighborhood.integrity}%
+                        </strong>
+                      </div>
+                    </div>
+                    <p className="health-status">
+                      Focus≠邻域 · hop≤{depth} 计分 · near alerts{' '}
+                      {hop1Issues.length}
+                      {topRule ? ` · top ${topRule}` : ''}
+                    </p>
+                    <div className="depth-row" role="group" aria-label="跳数深度">
+                      {[1, 2, 3].map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          className={depth === d ? 'active' : ''}
+                          onClick={() => {
+                            setDepth(d);
+                            setShowFarIssues(false);
+                          }}
+                        >
+                          hop {d}
                         </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      className="linkish"
+                      onClick={() => setShowGraph(true)}
+                    >
+                      打开图谱
+                    </button>
+                    {linkTypeCounts.length > 0 && (
+                      <>
+                        <h3 className="subhead">边类型</h3>
+                        {linkTypeCounts.slice(0, 8).map(([rel, n]) => (
+                          <div className="kv" key={rel}>
+                            <span>
+                              <i
+                                className="rel-swatch"
+                                style={{
+                                  background:
+                                    RELATION_COLOR[rel] ?? '#7a8b9e',
+                                }}
+                              />{' '}
+                              {rel}
+                            </span>
+                            <b>{n}</b>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    <h3 className="subhead">邻域构成</h3>
+                    <ul className="hop-bars">
+                      {[0, 1, 2, 3]
+                        .filter((h) => (neighborhood.byHop[h] ?? 0) > 0)
+                        .map((h) => {
+                          const count = neighborhood.byHop[h] ?? 0;
+                          const pct = Math.round(
+                            (count / graph.nodes.length) * 100,
+                          );
+                          return (
+                            <li key={h}>
+                              <span className={`hop-label hop-${h}`}>
+                                hop {h}
+                              </span>
+                              <div className="bar-track">
+                                <div
+                                  className={`bar-fill hop-${h}`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                              <b>{count}</b>
+                            </li>
+                          );
+                        })}
+                    </ul>
+                  </>
+                )}
+
+                <h3 className="subhead">告警 · Focus + Hop1</h3>
+                {hop1Issues.length > 0 ? (
+                  <ul className="issue-list">
+                    {hop1Issues.slice(0, 30).map((issue, i) => (
+                      <li key={`near-${issue.rule}-${issue.assetId ?? i}-${i}`}>
+                        <div
+                          className={`rule ${issue.severity === 'high' ? 'sev-high' : ''}`}
+                        >
+                          {issue.rule} · {issue.severity}
+                        </div>
+                        <div>{issue.message}</div>
+                        {issue.assetId &&
+                          issue.assetId !== graph.focusId && (
+                            <button
+                              type="button"
+                              onClick={() => enterEgo(issue.assetId!)}
+                            >
+                              → {issue.assetId}
+                            </button>
+                          )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="health-status">近邻无告警</p>
+                )}
+
+                {farIssues.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      className="linkish"
+                      onClick={() => setShowFarIssues((v) => !v)}
+                    >
+                      {showFarIssues
+                        ? '收起 Hop2+ 告警'
+                        : `显示更多 · Hop2+（${farIssues.length}）`}
+                    </button>
+                    {showFarIssues && (
+                      <ul className="issue-list far-issues">
+                        {farIssues.slice(0, 40).map((issue, i) => (
+                          <li
+                            key={`far-${issue.rule}-${issue.assetId ?? i}-${i}`}
+                          >
+                            <div className="rule">
+                              {issue.rule} · {issue.severity}
+                            </div>
+                            <div>{issue.message}</div>
+                            {issue.assetId && (
+                              <button
+                                type="button"
+                                onClick={() => enterEgo(issue.assetId!)}
+                              >
+                                → {issue.assetId}
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </section>
+            )}
           </>
         )}
       </aside>
@@ -661,4 +1028,15 @@ export function App() {
       {error && <div className="error-banner">{error}</div>}
     </div>
   );
+}
+
+/** Soft topic from titles like「广银落地范围与五题验收基线」→ 广银. */
+function guessTopic(title: string): string | undefined {
+  const t = title.trim();
+  if (!t) return undefined;
+  const m = t.match(/^([\u4e00-\u9fffA-Za-z0-9]{2,8})/);
+  if (m?.[1] && /广银|问数|CCDP|Ontology|指标/.test(m[1])) return m[1];
+  if (/广银/.test(t)) return '广银';
+  if (/问数/.test(t)) return '问数';
+  return undefined;
 }

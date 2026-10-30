@@ -1,17 +1,17 @@
 import type {
   ClassDef,
   KnowledgeAsset,
-  KnowledgeType,
   Ontology,
   RelationDef,
 } from '@kmind/shared';
+import { typeIdToOntologyClass } from '@kmind/shared';
 
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
 }
 
-const TYPE_TO_CLASS: Record<KnowledgeType, string> = {
+const TYPE_TO_CLASS: Record<string, string> = {
   problem: 'Problem',
   outcome: 'Outcome',
   problem_solution: 'ProblemSolution',
@@ -80,7 +80,9 @@ export class OntologyRegistry {
    */
   inferClass(asset: Partial<KnowledgeAsset>): string {
     if (asset.ontologyClass) return asset.ontologyClass;
-    if (asset.type) return TYPE_TO_CLASS[asset.type];
+    if (asset.type) {
+      return TYPE_TO_CLASS[asset.type] ?? typeIdToOntologyClass(asset.type);
+    }
     return 'BestPractice';
   }
 

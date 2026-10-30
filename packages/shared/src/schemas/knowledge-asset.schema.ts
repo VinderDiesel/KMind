@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-export const KnowledgeTypeEnum = z.enum([
+/** Builtin product types shipped with KMind (ADR-001 defaults). */
+export const BUILTIN_KNOWLEDGE_TYPES = [
   'problem',
   'outcome',
   'problem_solution',
@@ -10,8 +11,32 @@ export const KnowledgeTypeEnum = z.enum([
   'pitfall',
   'code_snippet',
   'process_spec',
-]);
-export type KnowledgeType = z.infer<typeof KnowledgeTypeEnum>;
+] as const;
+
+export type BuiltinKnowledgeType = (typeof BUILTIN_KNOWLEDGE_TYPES)[number];
+
+/**
+ * Runtime type id (builtin or vault-defined). Validated against AssetTypeRegistry on capture.
+ */
+export const KnowledgeTypeIdSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9_]{0,63}$/, 'type id must be snake_case');
+
+/** @deprecated Prefer KnowledgeTypeIdSchema; enum of builtin ids only. */
+export const KnowledgeTypeEnum = z.enum(BUILTIN_KNOWLEDGE_TYPES);
+
+export type KnowledgeType = z.infer<typeof KnowledgeTypeIdSchema>;
+
+/**
+ * Derive PascalCase ontology class from snake_case type id (ADR-001 short-term compat).
+ */
+export function typeIdToOntologyClass(typeId: string): string {
+  return typeId
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join('');
+}
 
 /**
  * Graph edge kinds between assets (and mentions→Entity in ontology).
@@ -90,7 +115,7 @@ export type CodeAnchor = z.infer<typeof CodeAnchorSchema>;
 
 export const KnowledgeAssetSchema = z.object({
   id: KnowledgeAssetIdSchema,
-  type: KnowledgeTypeEnum,
+  type: KnowledgeTypeIdSchema,
   title: z.string().min(1).max(200),
   project: z.string().default('global'),
   timestamp: z.string().datetime(),

@@ -1,9 +1,13 @@
 import type { KnowledgeAsset, KnowledgeType } from '@kmind/shared';
-import { readCodeAnchors } from '../compiler/code-anchors.js';
+import {
+  assetHasCodeAnchors,
+  readCodeAnchors,
+} from '../compiler/code-anchors.js';
 import type { SqliteStore } from '../storage/sqlite-store.js';
 import type { HealthIssue } from '../health/rules/expiry.js';
 
-export const EGO_DEFAULT_DEPTH = 2;
+/** Default hop depth for reading-focused ego (Hop2 is opt-in). */
+export const EGO_DEFAULT_DEPTH = 1;
 export const EGO_MAX_DEPTH = 5;
 export const EGO_DEFAULT_NODE_CAP = 150;
 
@@ -137,7 +141,9 @@ function toEgoNode(
   hop: number,
   hasHealthIssue: boolean,
 ): EgoNode {
-  const anchors = readCodeAnchors(asset.metadata);
+  const metaAnchors = readCodeAnchors(asset.metadata);
+  const hasAnchors =
+    metaAnchors.length > 0 || assetHasCodeAnchors(asset.body, asset.metadata);
   return {
     id: asset.id,
     title: asset.title,
@@ -147,8 +153,8 @@ function toEgoNode(
     status: asset.status,
     ontologyClass: asset.ontologyClass,
     hasHealthIssue,
-    hasCodeAnchors: anchors.length > 0,
-    codeAnchorCount: anchors.length,
+    hasCodeAnchors: hasAnchors,
+    codeAnchorCount: metaAnchors.length,
   };
 }
 

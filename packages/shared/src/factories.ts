@@ -4,6 +4,7 @@ import type {
   KnowledgeType,
   Terminal,
 } from './schemas/knowledge-asset.schema.js';
+import { typeIdToOntologyClass } from './schemas/knowledge-asset.schema.js';
 import type { SessionRecord } from './schemas/session.schema.js';
 
 export interface KnowledgeAssetFactoryOptions {
@@ -57,7 +58,7 @@ export function createKnowledgeAsset(
     related: options.related ?? [],
     links: options.links ?? [],
     body: options.body ?? `## Background\n\nTest body for ${type}.`,
-    ontologyClass: typeToClass(type),
+    ontologyClass: typeIdToOntologyClass(type),
     metadata: options.links?.length ? { links: options.links } : {},
   };
 }
@@ -99,17 +100,3 @@ export function resetFactoryCounters(): void {
   idCounter = 1;
 }
 
-function typeToClass(type: KnowledgeType): string {
-  const map: Record<KnowledgeType, string> = {
-    problem: 'Problem',
-    outcome: 'Outcome',
-    problem_solution: 'ProblemSolution',
-    best_practice: 'BestPractice',
-    architecture_design: 'ArchitectureDesign',
-    tool_usage: 'ToolUsage',
-    pitfall: 'Pitfall',
-    code_snippet: 'CodeSnippet',
-    process_spec: 'ProcessSpec',
-  };
-  return map[type];
-}

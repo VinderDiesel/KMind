@@ -8,6 +8,7 @@ import {
   SqliteStore,
   OntologyRegistry,
   loadOntology,
+  createAssetTypeRegistry,
   Exporter,
   Importer,
   AuditLogger,
@@ -15,14 +16,19 @@ import {
   assessCaptureQuality,
   assessProjectCoverage,
   assessOverviewChildrenDepth,
+  buildCaptureSuggestions,
+  loadEvolutionQueue,
+  runEvolutionScan,
   isOverviewTitle,
+  type AssetTypeRegistry,
   type ExportFilter,
   type ImportConflictPolicy,
 } from '@kmind/core';
 import {
   AssetLinkSchema,
-  KnowledgeTypeEnum,
+  KnowledgeTypeIdSchema,
   type KnowledgeType,
+  KMindError,
 } from '@kmind/shared';
 import { MCP_TOOLS, type ToolEffect } from './tools.js';
 import { LruTtlCache } from './cache.js';
@@ -33,6 +39,7 @@ export interface HandlerContext {
   store: SqliteStore;
   autoApprove: string[];
   terminal?: string;
+  assetTypes?: AssetTypeRegistry;
 }
 
 const cache = new LruTtlCache<unknown>(256, 30_000);
@@ -180,6 +187,134 @@ async function dispatch(
       registry.load(await loadOntology(ctx.vault.ontologyDir));
       return registry.describe(args.class as string | undefined);
     }
+    case 'kmind_asset_types': {
+      const assetTypes = await resolveAssetTypes(ctx);
+      const id =
+        typeof args.id === 'string' && args.id.trim() ? args.id.trim() : undefined;
+      if (id) {
+        const def = assetTypes.get(id);
+        if (!def) return { error: 'not_found', id };
+        const all = assetTypes.describeAll().find((t) => t.id === id);
+        return all ?? { error: 'not_found', id };
+      }
+      const includeDisabled = args.includeDisabled === true;
+      return {
+        types: includeDisabled
+          ? assetTypes.describeAll()
+          : assetTypes.describeEnabled(),
+      };
+    }
+    case 'kmind_pack': {
+      const id =
+        typeof args.id === 'string' && args.id.trim()
+          ? args.id.trim()
+          : undefined;
+      const query =
+        typeof args.query === 'string' && args.query.trim()
+          ? args.query.trim()
+          : undefined;
+      if (!id && !query) {
+        return {
+          error: 'id_or_query_required',
+          suggestion: 'Pass id (k-…) or query for Context Pack',
+        };
+      }
+      const depth = Number(args.depth ?? 1);
+      const neighborCap = Number(args.neighborCap ?? 24);
+      return ctx.engine.pack({
+        id,
+        query,
+        project:
+          typeof args.project === 'string' && args.project.trim()
+            ? args.project.trim()
+            : undefined,
+        type:
+          typeof args.type === 'string' && args.type.trim()
+            ? (args.type.trim() as never)
+            : undefined,
+        depth: Number.isFinite(depth) ? depth : 1,
+        neighborCap: Number.isFinite(neighborCap) ? neighborCap : 24,
+      });
+    }
+    case 'kmind_evolution_queue': {
+      if (args.refresh === true) {
+        await runEvolutionScan(ctx.vault, ctx.store);
+      }
+      const queue = await loadEvolutionQueue(ctx.vault);
+      const includeClosed = args.includeClosed === true;
+      const limit = Math.min(200, Math.max(1, Number(args.limit ?? 50)));
+      const project =
+        typeof args.project === 'string' && args.project.trim()
+          ? args.project.trim()
+          : undefined;
+      let items = includeClosed
+        ? queue.items
+        : queue.items.filter((i) => i.status === 'open');
+      if (project) {
+        items = items.filter((i) => i.project === project);
+      }
+      return {
+        scannedAt: queue.scannedAt,
+        summary: queue.summary,
+        items: items.slice(0, limit),
+        note: 'Diagnosis only — capture/fix manually; then kmind evolution ack <id>',
+      };
+    }
+    case 'kmind_capture_suggest': {
+      const content = String(args.content ?? '');
+      const project = String(args.project ?? '').trim();
+      if (!content.trim()) {
+        return { error: 'content_required' };
+      }
+      if (!project || project === 'global') {
+        return {
+          error: 'project_required',
+          suggestion: '传明确 project（禁止缺省/global）',
+        };
+      }
+      const title = sanitizeTitle(
+        String(args.title ?? content.split('\n')[0] ?? 'untitled'),
+      );
+      const typeParse = KnowledgeTypeIdSchema.safeParse(args.type);
+      const related = Array.isArray(args.related)
+        ? args.related.filter((x): x is string => typeof x === 'string')
+        : undefined;
+      const links = Array.isArray(args.links)
+        ? args.links
+            .map((item) => AssetLinkSchema.safeParse(item))
+            .filter((r) => r.success)
+            .map((r) => r.data)
+        : undefined;
+      const anchors = Array.isArray(args.anchors) ? args.anchors : undefined;
+      const assetTypes = await resolveAssetTypes(ctx);
+      return buildCaptureSuggestions(
+        {
+          content,
+          title,
+          project,
+          type: typeParse.success ? typeParse.data : undefined,
+          related,
+          links,
+          anchors: Array.isArray(anchors)
+            ? anchors.map((a) => {
+                const o = a as {
+                  file?: string;
+                  symbol?: string;
+                  kind?: string;
+                  line?: number;
+                };
+                return {
+                  file: o.file,
+                  symbol: o.symbol,
+                  kind: o.kind,
+                  line: o.line,
+                };
+              })
+            : undefined,
+        },
+        { store: ctx.store, assetTypes },
+      );
+    }
     case 'kmind_capture': {
       const content = String(args.content);
       const title = sanitizeTitle(
@@ -194,8 +329,26 @@ async function dispatch(
           suggestion: '例如 project: "ccdp-ontology" 或 "meta-brain"',
         };
       }
-      const typeParse = KnowledgeTypeEnum.safeParse(args.type ?? 'best_practice');
+      const typeParse = KnowledgeTypeIdSchema.safeParse(
+        args.type ?? 'best_practice',
+      );
       const type = typeParse.success ? typeParse.data : 'best_practice';
+      const assetTypes = await resolveAssetTypes(ctx);
+      let typeDef;
+      try {
+        typeDef = assetTypes.assertCapturable(type);
+      } catch (err) {
+        return {
+          captured: false,
+          error: 'type_gate',
+          type,
+          reasons: [err instanceof Error ? err.message : String(err)],
+          suggestion:
+            err instanceof KMindError
+              ? err.suggestion
+              : 'Call kmind_asset_types for enabled ids',
+        };
+      }
       const anchors = Array.isArray(args.anchors) ? args.anchors : undefined;
       const related = Array.isArray(args.related)
         ? args.related.filter((x): x is string => typeof x === 'string')
@@ -224,6 +377,7 @@ async function dispatch(
           : undefined,
         incremental,
         hubIds,
+        typeDef,
       });
       let overviewChildGate: {
         ok: boolean;
@@ -244,6 +398,33 @@ async function dispatch(
         );
       }
       if (!quality.ok || !overviewChildGate.ok) {
+        const suggestReport = await buildCaptureSuggestions(
+          {
+            content,
+            title,
+            project,
+            type,
+            related,
+            links,
+            anchors: Array.isArray(anchors)
+              ? anchors.map((a) => {
+                  const o = a as {
+                    file?: string;
+                    symbol?: string;
+                    kind?: string;
+                    line?: number;
+                  };
+                  return {
+                    file: o.file,
+                    symbol: o.symbol,
+                    kind: o.kind,
+                    line: o.line,
+                  };
+                })
+              : undefined,
+          },
+          { store: ctx.store, assetTypes },
+        );
         return {
           captured: false,
           error: 'quality_gate',
@@ -253,8 +434,10 @@ async function dispatch(
           hubIds,
           reasons: [...quality.reasons, ...overviewChildGate.reasons],
           hints: quality.hints,
+          suggestions: suggestReport.suggestions,
+          proposedCapture: suggestReport.proposedCapture,
           suggestion:
-            '增量也须写深：Codegraph/读码→实现+注意+红线+代码锚点；related/links 挂到本 project 总览或邻卡；总览禁止在子卡全浅时只重挂索引。整理某系统须四阶段后 kmind_coverage 验收。',
+            '先看 suggestions/proposedCapture；与人对齐后把 apply 字段回灌 kmind_capture。增量须写深：锚点+实现/注意/红线；related/links 挂图；整理后 kmind_coverage。',
         };
       }
       const blob = new BlobStore(ctx.vault.rawDir);
@@ -276,7 +459,11 @@ async function dispatch(
       );
       const registry = new OntologyRegistry();
       registry.load(await loadOntology(ctx.vault.ontologyDir));
-      const pipeline = createPipeline(ctx.vault, { sqlite: ctx.store, registry });
+      const pipeline = createPipeline(ctx.vault, {
+        sqlite: ctx.store,
+        registry,
+        assetTypes,
+      });
       const result = await pipeline.run({
         project,
         incremental: true,
@@ -362,10 +549,15 @@ async function dispatch(
   }
 }
 
+async function resolveAssetTypes(ctx: HandlerContext): Promise<AssetTypeRegistry> {
+  if (ctx.assetTypes) return ctx.assetTypes;
+  return createAssetTypeRegistry(ctx.vault.assetTypesDir);
+}
+
 function buildExportFilter(args: Record<string, unknown>): ExportFilter | undefined {
   const projects = toStringList(args.project);
   const types = toStringList(args.type)
-    .map((t) => KnowledgeTypeEnum.safeParse(t))
+    .map((t) => KnowledgeTypeIdSchema.safeParse(t))
     .filter((r): r is { success: true; data: KnowledgeType } => r.success)
     .map((r) => r.data);
   if (!projects.length && !types.length) return undefined;

@@ -1,4 +1,4 @@
-import type { KnowledgeType } from '@kmind/shared';
+import type { AssetTypeDef, KnowledgeType } from '@kmind/shared';
 
 export interface CaptureQualityOptions {
   title?: string;
@@ -14,6 +14,8 @@ export interface CaptureQualityOptions {
   incremental?: boolean;
   /** Suggested hub ids (e.g. 总览) for hints when incremental attach is missing. */
   hubIds?: string[];
+  /** ADR-001: type def from AssetTypeRegistry (sections + whitelist rules). */
+  typeDef?: AssetTypeDef;
 }
 
 export interface CaptureQualityResult {
@@ -24,7 +26,7 @@ export interface CaptureQualityResult {
 }
 
 /** Types that describe how something works (need implementation depth). */
-const FEATURE_LIKE: ReadonlySet<KnowledgeType> = new Set([
+const FEATURE_LIKE: ReadonlySet<string> = new Set([
   'architecture_design',
   'tool_usage',
   'process_spec',
@@ -32,8 +34,8 @@ const FEATURE_LIKE: ReadonlySet<KnowledgeType> = new Set([
   'best_practice',
 ]);
 
-const PROBLEM_TYPE: KnowledgeType = 'problem';
-const OUTCOME_TYPE: KnowledgeType = 'outcome';
+const PROBLEM_TYPE = 'problem';
+const OUTCOME_TYPE = 'outcome';
 
 /** Depth floor: incremental/default captures must clear this without user nagging. */
 const MIN_CHARS_FEATURE = 550;
@@ -116,12 +118,34 @@ export function assessCaptureQuality(
   const anchors = options.anchors ?? [];
   const overview = isOverviewCard(title, text);
   const incremental = Boolean(options.incremental);
+  const typeDef = options.typeDef;
+  const profile =
+    typeDef?.legacyProfile ??
+    (type === PROBLEM_TYPE
+      ? 'problem'
+      : type === OUTCOME_TYPE
+        ? 'outcome'
+        : FEATURE_LIKE.has(type)
+          ? 'feature'
+          : typeDef
+            ? undefined
+            : 'solution');
+
+  const ruleMin = typeDef?.rules.find(
+    (r): r is { minBodyChars: number } => 'minBodyChars' in r,
+  )?.minBodyChars;
+  const ruleMax = typeDef?.rules.find(
+    (r): r is { maxBodyChars: number } => 'maxBodyChars' in r,
+  )?.maxBodyChars;
+
   const minChars = overview
     ? MIN_CHARS_OVERVIEW
-    : FEATURE_LIKE.has(type)
-      ? MIN_CHARS_FEATURE
-      : MIN_CHARS_DEFAULT;
-  const maxChars = overview ? MAX_CHARS_OVERVIEW : MAX_CHARS_DETAIL;
+    : (ruleMin ??
+      (profile === 'feature' ? MIN_CHARS_FEATURE : MIN_CHARS_DEFAULT));
+  const maxChars =
+    overview
+      ? MAX_CHARS_OVERVIEW
+      : (ruleMax ?? MAX_CHARS_DETAIL);
 
   if (text.length < minChars) {
     reasons.push(
@@ -143,7 +167,7 @@ export function assessCaptureQuality(
 
   // Overview cards: allow thinner detail if they declare related children.
   if (!overview) {
-    if (type === PROBLEM_TYPE) {
+    if (profile === 'problem') {
       if (!/(症状|复现|现象|触发|impact|symptom|repro)/i.test(text)) {
         reasons.push(
           'problem 卡须写清症状/复现/触发条件（可独立跟踪的未解问题，不要塞解决方案）',
@@ -159,7 +183,7 @@ export function assessCaptureQuality(
           '若已有方案，请拆成 problem_solution + links:[{relation:solves}]→本问题，勿把方案写进 problem 卡',
         );
       }
-    } else if (type === OUTCOME_TYPE) {
+    } else if (profile === 'outcome') {
       if (!/(结果|验证|上线|指标|通过|失败|证据|evidence|verified)/i.test(text)) {
         reasons.push('outcome 卡须写清实施/验证结果与证据（命令输出、指标、日期）');
       }
@@ -171,7 +195,7 @@ export function assessCaptureQuality(
           'outcome 卡须 links:[{id:问题id, relation:"verifies"}]，用于确认问题是否已解决',
         );
       }
-    } else if (FEATURE_LIKE.has(type)) {
+    } else if (profile === 'feature') {
       for (const f of DETAIL_FAMILIES) {
         if (!coveredIds.has(f.id)) {
           reasons.push(
@@ -179,7 +203,7 @@ export function assessCaptureQuality(
           );
         }
       }
-    } else {
+    } else if (profile === 'solution') {
       // problem_solution / pitfall
       if (!coveredIds.has('implementation')) {
         reasons.push(
@@ -200,9 +224,9 @@ export function assessCaptureQuality(
       }
     }
 
-    if (type !== PROBLEM_TYPE) {
+    if (profile !== 'problem') {
       const concrete = hasConcreteSignals(text);
-      if (!concrete) {
+      if (!concrete && (profile === 'feature' || profile === 'solution' || profile === 'outcome')) {
         reasons.push(
           '缺少可核对细节（文件路径、符号名、命令、配置键、编号步骤或代码块）——不要只写抽象结论',
         );
@@ -212,17 +236,29 @@ export function assessCaptureQuality(
     }
 
     // Architecture-like cards must cite code (forces dig, not catalog prose).
-    if (
-      (type === 'architecture_design' ||
-        type === 'tool_usage' ||
-        type === 'code_snippet' ||
-        type === 'process_spec') &&
-      !hasCodeCitation(text, anchors)
-    ) {
+    const needsCitationByType =
+      type === 'architecture_design' ||
+      type === 'tool_usage' ||
+      type === 'code_snippet' ||
+      type === 'process_spec';
+    const needsCitationByRule = typeDef?.rules.some(
+      (r) => 'requireCodeCitation' in r && r.requireCodeCitation,
+    );
+    if ((needsCitationByType || needsCitationByRule) && !hasCodeCitation(text, anchors)) {
       reasons.push(
         '架构/流程/工具类必须含代码锚点（## 代码锚点、path/file.ext、符号名，或 capture.anchors）——请先 Codegraph/读码再写，禁止目录级空文',
       );
     }
+
+    applyRegistryTypeRules(text, typeDef, {
+      reasons,
+      hints,
+      coveredIds,
+      links,
+      anchors,
+      skipMinMax: true,
+      skipCodeCitation: Boolean(needsCitationByType || needsCitationByRule),
+    });
 
     // Fake "one topic": whole pipeline S0…S10 in one card.
     if (/S0[\s\S]{0,80}S10|S0\s*[→\-~]+\s*S10/i.test(text) && text.length > 900) {
@@ -291,9 +327,105 @@ export function assessCaptureQuality(
   return { ok: reasons.length === 0, reasons, hints };
 }
 
+/**
+ * Apply ADR-001 whitelist rules + requiredSections from AssetTypeDef.
+ */
+function applyRegistryTypeRules(
+  text: string,
+  typeDef: AssetTypeDef | undefined,
+  ctx: {
+    reasons: string[];
+    hints: string[];
+    coveredIds: Set<string>;
+    links: Array<{ id: string; relation: string }>;
+    anchors: Array<{ file?: string; symbol?: string }>;
+    skipMinMax?: boolean;
+    skipCodeCitation?: boolean;
+  },
+): void {
+  if (!typeDef) return;
+
+  for (const section of typeDef.requiredSections) {
+    const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`^##\\s+${escaped}\\b`, 'im');
+    if (!re.test(text)) {
+      ctx.reasons.push(`缺少必填段落「## ${section}」（类型 ${typeDef.id}）`);
+    }
+  }
+
+  for (const rule of typeDef.rules) {
+    if (ctx.skipMinMax && ('minBodyChars' in rule || 'maxBodyChars' in rule)) {
+      continue;
+    }
+    if ('minBodyChars' in rule && text.length < rule.minBodyChars) {
+      ctx.reasons.push(
+        `正文过短（${text.length} < ${rule.minBodyChars} 字，类型 ${typeDef.id}）`,
+      );
+    }
+    if ('maxBodyChars' in rule && text.length > rule.maxBodyChars) {
+      ctx.reasons.push(
+        `正文过长（${text.length} > ${rule.maxBodyChars} 字，类型 ${typeDef.id}）`,
+      );
+    }
+    if ('requireDetailFamilies' in rule) {
+      for (const id of rule.requireDetailFamilies) {
+        if (!ctx.coveredIds.has(id)) {
+          const label =
+            DETAIL_FAMILIES.find((f) => f.id === id)?.label ?? id;
+          ctx.reasons.push(`缺少「${label}」（类型 ${typeDef.id}）`);
+        }
+      }
+    }
+    if ('requireLinkRelation' in rule) {
+      if (!ctx.links.some((l) => l.relation === rule.requireLinkRelation)) {
+        ctx.reasons.push(
+          `须 links 含 relation:"${rule.requireLinkRelation}"（类型 ${typeDef.id}）`,
+        );
+      }
+    }
+    if ('hintLinkRelation' in rule) {
+      if (!ctx.links.some((l) => l.relation === rule.hintLinkRelation)) {
+        ctx.hints.push(
+          `建议 links:[{relation:"${rule.hintLinkRelation}"}]（类型 ${typeDef.id}）`,
+        );
+      }
+    }
+    if (
+      'requireCodeCitation' in rule &&
+      rule.requireCodeCitation &&
+      !ctx.skipCodeCitation &&
+      !hasCodeCitation(text, ctx.anchors)
+    ) {
+      ctx.reasons.push(
+        `须含代码锚点（类型 ${typeDef.id}）`,
+      );
+    }
+    if ('requireConcreteSignals' in rule && rule.requireConcreteSignals) {
+      if (!hasConcreteSignals(text)) {
+        ctx.reasons.push(
+          `缺少可核对细节（类型 ${typeDef.id}）`,
+        );
+      }
+    }
+    if ('requirePatterns' in rule) {
+      const ok = rule.requirePatterns.some((p) => {
+        try {
+          return new RegExp(p, 'i').test(text);
+        } catch {
+          return false;
+        }
+      });
+      if (!ok) ctx.reasons.push(rule.message);
+    }
+  }
+}
+
 function isOverviewCard(title: string, body: string): boolean {
-  const head = `${title}\n${body.slice(0, 400)}`;
-  return /总览|概览|索引|地图|overview|index\s*card|导航/i.test(head);
+  // Title is authoritative — body may discuss「总览卡」rules without being a hub.
+  if (isOverviewTitle(title)) return true;
+  // Only the opening heading line may mark an untitled hub paste.
+  const firstH2 = body.match(/^##\s+(.+)$/m)?.[1] ?? '';
+  return /总览|概览|索引|地图|overview|index\s*card/i.test(firstH2);
 }
 
 /**

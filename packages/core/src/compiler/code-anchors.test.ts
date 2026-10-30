@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { extractCodeAnchors, readCodeAnchors } from './code-anchors.js';
+import {
+  assetHasCodeAnchors,
+  enrichAssetCodeAnchors,
+  extractCodeAnchors,
+  readCodeAnchors,
+} from './code-anchors.js';
 import { checkMissingCodeAnchors } from '../health/rules/missing-code-anchors.js';
 import { createKnowledgeAsset, resetFactoryCounters } from '@kmind/shared';
 
@@ -74,5 +79,43 @@ describe('checkMissingCodeAnchors', () => {
     resetFactoryCounters();
     const asset = createKnowledgeAsset({ type: 'code_snippet' });
     expect(checkMissingCodeAnchors([asset], false)).toHaveLength(0);
+  });
+
+  it('given body ## 代码锚点 when check then silent even if metadata empty', () => {
+    resetFactoryCounters();
+    const asset = createKnowledgeAsset({
+      type: 'architecture_design',
+      body: [
+        '## 实现方式',
+        'ok',
+        '## 代码锚点',
+        '- `src/Foo.ts` · `bar` · function',
+      ].join('\n'),
+    });
+    expect(checkMissingCodeAnchors([asset], true)).toHaveLength(0);
+  });
+
+  it('given overview title when check then skips', () => {
+    resetFactoryCounters();
+    const asset = createKnowledgeAsset({
+      type: 'architecture_design',
+      title: '问数系统知识总览',
+    });
+    expect(checkMissingCodeAnchors([asset], true)).toHaveLength(0);
+  });
+});
+
+describe('enrichAssetCodeAnchors', () => {
+  it('given body anchors when enrich then writes metadata.codeAnchors', () => {
+    const asset = createKnowledgeAsset({
+      type: 'architecture_design',
+      body: [
+        '## 代码锚点',
+        '- `packages/core/src/foo.ts` · `bar` · function',
+      ].join('\n'),
+    });
+    const enriched = enrichAssetCodeAnchors(asset);
+    expect(readCodeAnchors(enriched.metadata).length).toBe(1);
+    expect(assetHasCodeAnchors(enriched.body, enriched.metadata)).toBe(true);
   });
 });

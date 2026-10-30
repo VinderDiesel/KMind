@@ -9,6 +9,8 @@ export interface Vault {
   readonly knowledgeDir: string;
   readonly rawDir: string;
   readonly ontologyDir: string;
+  /** ADR-001: vault overlays for asset type defs (YAML/JSON). */
+  readonly assetTypesDir: string;
   readonly indexPath: string;
   readonly configPath: string;
   readonly auditDir: string;
@@ -31,6 +33,7 @@ class VaultImpl implements Vault {
   readonly knowledgeDir: string;
   readonly rawDir: string;
   readonly ontologyDir: string;
+  readonly assetTypesDir: string;
   readonly indexPath: string;
   readonly configPath: string;
   readonly auditDir: string;
@@ -39,6 +42,7 @@ class VaultImpl implements Vault {
     this.knowledgeDir = path.join(root, 'knowledge');
     this.rawDir = path.join(root, 'raw');
     this.ontologyDir = path.join(root, 'ontology');
+    this.assetTypesDir = path.join(root, 'asset-types');
     this.indexPath = path.join(root, 'index.db');
     this.configPath = path.join(root, 'config.yaml');
     this.auditDir = path.join(root, 'audit');
@@ -58,6 +62,7 @@ class VaultImpl implements Vault {
     await fs.mkdir(path.join(this.rawDir, 'sessions'), { recursive: true });
     await fs.mkdir(path.join(this.rawDir, 'manual'), { recursive: true });
     await fs.mkdir(this.ontologyDir, { recursive: true });
+    await fs.mkdir(this.assetTypesDir, { recursive: true });
     await fs.mkdir(this.auditDir, { recursive: true });
     await fs.mkdir(path.join(this.root, 'diagnostics'), { recursive: true });
 

@@ -360,6 +360,252 @@ body {
   z-index: 1;
 }
 
+.stage-compact {
+  right: min(21.5rem, calc(100vw - 1rem));
+  top: 4.5rem;
+  bottom: 1rem;
+  left: 1rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: rgba(8, 11, 16, 0.88);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+  z-index: 3;
+  pointer-events: auto;
+}
+
+.reader-main {
+  padding: 1.25rem 1.5rem 2rem;
+  max-width: 52rem;
+}
+
+.reader-head h1 {
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: clamp(1.25rem, 2.2vw, 1.75rem);
+  margin: 0 0 0.4rem;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+}
+
+.reader-meta {
+  margin: 0 0 0.85rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.reader-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.1rem;
+}
+
+.reader-actions button,
+.linkish {
+  border: 1px solid var(--line);
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  font: 500 0.68rem/1 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.65rem;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.reader-actions button:hover,
+.linkish:hover {
+  background: rgba(79, 209, 197, 0.28);
+}
+
+.linkish {
+  display: inline-block;
+  margin: 0.5rem 0;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.md-body {
+  font-size: 0.84rem;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+.md-body h3 {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  margin: 1.35rem 0 0.55rem;
+  color: var(--cyan);
+  letter-spacing: 0.04em;
+}
+
+.md-body h4 {
+  font-size: 0.88rem;
+  margin: 1rem 0 0.4rem;
+  color: var(--amber);
+}
+
+.md-body p {
+  margin: 0 0 0.75rem;
+}
+
+.md-body ul,
+.md-body ol {
+  margin: 0 0 0.85rem;
+  padding-left: 1.25rem;
+}
+
+.md-body li {
+  margin: 0.25rem 0;
+}
+
+.md-body code {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: rgba(79, 209, 197, 0.1);
+  padding: 0.08rem 0.28rem;
+  border-radius: 2px;
+}
+
+.md-body pre {
+  margin: 0.6rem 0 1rem;
+  padding: 0.75rem 0.85rem;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+.md-body pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.md-body strong {
+  color: #e8eef5;
+  font-weight: 600;
+}
+
+.hud-tabs {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(8, 11, 16, 0.85);
+  flex-shrink: 0;
+  /* .hud itself is pointer-events:none; restore for tabs outside .panel */
+  pointer-events: auto;
+}
+
+.hud-tabs button {
+  flex: 1;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: 500 0.68rem/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.55rem 0.4rem;
+  cursor: pointer;
+}
+
+.hud-tabs button:last-child {
+  border-right: 0;
+}
+
+.hud-tabs button.active {
+  color: var(--bg-0);
+  background: var(--cyan);
+}
+
+.hud-tabs button:hover:not(.active) {
+  color: var(--text);
+  background: var(--cyan-dim);
+}
+
+.extend-group {
+  margin-top: 0.35rem;
+}
+
+.extend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.extend-list li button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  padding: 0.55rem 0.15rem;
+  cursor: pointer;
+  font: 400 0.75rem/1.35 var(--font-mono);
+}
+
+.extend-list li button:hover {
+  background: var(--cyan-dim);
+}
+
+.extend-list strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  margin-bottom: 0.12rem;
+}
+
+.extend-list em {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.coverage-box {
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.action-list {
+  margin: 0 0 0.6rem;
+  padding-left: 1rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.action-list li {
+  margin: 0.25rem 0;
+}
+
+.rel-swatch {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  margin-right: 0.25rem;
+  vertical-align: middle;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.legend-note {
+  opacity: 0.75;
+  letter-spacing: 0.06em;
+}
+
+.far-issues {
+  opacity: 0.85;
+  border-top: 1px dashed var(--line);
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+}
+
 .empty {
   position: absolute;
   inset: 0;
@@ -493,7 +739,7 @@ body {
   list-style: none;
   margin: 0.45rem 0 0.25rem;
   padding: 0;
-  max-height: 8.5rem;
+  max-height: 20rem;
   overflow: auto;
   border-top: 1px solid var(--line);
 }

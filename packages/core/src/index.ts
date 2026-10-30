@@ -7,6 +7,18 @@ export { FieldEncryption } from './storage/encryption.js';
 export { loadOntology, saveOntology } from './ontology/ontology-loader.js';
 export { OntologyRegistry } from './ontology/ontology-registry.js';
 export {
+  AssetTypeRegistry,
+  createAssetTypeRegistry,
+  type AssetTypeListItem,
+} from './asset-types/registry.js';
+export {
+  loadAssetTypes,
+  loadBuiltinAssetTypes,
+  loadVaultAssetTypeOverlays,
+} from './asset-types/loader.js';
+export { mergeAssetTypeDef, mergeAssetTypeMaps } from './asset-types/merge.js';
+export { BUILTIN_ASSET_TYPES } from './asset-types/builtins.js';
+export {
   OntologyEvolver,
   EVOLVER_CONFIDENCE_THRESHOLD,
   EVOLVER_DEMOTE_PERIODS,
@@ -33,6 +45,8 @@ export {
   extractCodeAnchors,
   readCodeAnchors,
   withCodeAnchorsMetadata,
+  enrichAssetCodeAnchors,
+  assetHasCodeAnchors,
 } from './compiler/code-anchors.js';
 export { sanitizeTitle } from './compiler/title.js';
 export {
@@ -42,6 +56,11 @@ export {
   type CaptureQualityResult,
   type CaptureQualityOptions,
 } from './compiler/capture-quality.js';
+export {
+  buildCaptureSuggestions,
+  type CaptureSuggestInput,
+  type CaptureSuggestDeps,
+} from './compiler/capture-suggest.js';
 export {
   getProblemStatus,
   type ProblemStatusReport,
@@ -61,6 +80,10 @@ export {
   type SearchQuery,
   type SearchResult,
 } from './query/engine.js';
+export {
+  buildContextPack,
+  type BuildContextPackOptions,
+} from './query/context-pack.js';
 export { hybridSearch } from './query/hybrid.js';
 export { parseGraphQuery } from './query/graph-parser.js';
 export {
@@ -102,6 +125,40 @@ export type {
   McpConfigTemplate,
   LifecycleHookConfig,
 } from './adapters/types.js';
+
+export {
+  parseCron,
+  cronMatches,
+  nextCron,
+  minuteSlot,
+  assertValidCron,
+  type CronExpr,
+  type CronField,
+} from './schedule/cron.js';
+export {
+  runAdapterMaintenance,
+  type MaintenanceDeps,
+  type AdapterMaintenanceResult,
+} from './schedule/maintenance.js';
+export {
+  loadScheduleState,
+  saveScheduleState,
+  markRunStart,
+  markRunFinish,
+  scheduleStatePath,
+  schedulePidPath,
+  ScheduleStateSchema,
+  type ScheduleState,
+  type AdapterRunState,
+} from './schedule/state.js';
+export {
+  evolutionQueuePath,
+  loadEvolutionQueue,
+  saveEvolutionQueue,
+  runEvolutionScan,
+  updateEvolutionTodoStatus,
+  type EvolutionScanResult,
+} from './schedule/evolution-queue.js';
 
 export { createLogger } from './observability/logger.js';
 export { DiagnosticCollector } from './observability/diagnostic-collector.js';
