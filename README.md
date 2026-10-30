@@ -286,15 +286,15 @@ kmind ui
 
 **Ego · 阅读**：搜到知识卡后主栏渲染 Markdown（实现方式 / 注意 / 红线）；侧栏 Focus 完整度与代码锚点只计本卡。
 
-![Ego 阅读模式：广银落地范围与五题验收基线](docs/images/ui-ego-read.jpg)
+![Ego 阅读模式：Capture质量闸门（明细与挂图双约束）](docs/images/ui-ego-read.jpg)
 
 **Ego · 延伸**：按 `part_of` / `related_to` 等关系列出 Hop1 邻居，点击即可换焦点继续读。
 
-![Ego 延伸阅读：按关系分组的邻卡](docs/images/ui-ego-extend.jpg)
+![Ego 延伸阅读：KMind 相关卡（Vault / Session / 总览 / 踩坑）](docs/images/ui-ego-extend.jpg)
 
 **Global · 巡检**：全库图谱 + Vault 健康告警（运维视角，非单卡阅读）。
 
-![Global 全库巡检：图谱与 Vault health](docs/images/ui-global-health.jpg)
+![Global 巡检：kmind 项目图谱与 Vault health](docs/images/ui-global-health.jpg)
 
 ---
 

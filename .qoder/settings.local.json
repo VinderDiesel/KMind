@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git diff -- packages/mcp-server/src/tools.ts | head -80)",
+      "Bash(git diff -- packages/ui/src/App.tsx | head -80)",
+      "Bash(git diff -- README.md | head -80)",
+      "Bash(git diff -- packages/core/src/compiler/capture-quality.ts | head -60)",
+      "Bash(cat docs/adr/001-asset-type-registry.md | head -30)",
+      "Bash(cat docs/adr/002-intelligence-flywheel.md | head -30)",
+      "Bash(cat .qoder/settings.local.json 2>/dev/null | head -20)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<'EOF'\nfeat: implement intelligence flywheel \\(ADR-001 + ADR-002\\)\n\n- ADR-001: data-driven Asset Type Registry with pluggable types,\n  scaffold templates, quality rules, and classification patterns\n- ADR-002: intelligence flywheel — smart capture suggestions,\n  context pack for structured recall, evolution queue for coverage\n- New CLI commands: pack, suggest-capture, schedule \\(cron-based\n  auto-organize per adapter\\), evolution \\(scan/status/ack\\)\n- New MCP tools: kmind_asset_types, kmind_pack, kmind_suggest_capture,\n  kmind_evolution_scan/status/ack\n- UI overhaul: reading mode with FocusMarkdown, relation-colored\n  graph edges, coverage summary, HUD tabs \\(read/extend/health\\)\n- Schedule system: cron parser, evolution queue, maintenance runner\n  with daemon mode and per-adapter state tracking\n- Docs: ADR-001/002, UI screenshots, updated README with new commands\nEOF\n\\)\")",
+      "Bash(git push:*)"
+    ]
+  }
+}
