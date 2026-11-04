@@ -28,7 +28,23 @@ export type CoverageIssueCode =
   | 'missing_anchors'
   | 'orphan_detail'
   | 'empty_outbound'
-  | 'thin_topic';
+  | 'thin_topic'
+  | 'type_mono';
+
+/** Detail types that break an all-architecture mono cluster. */
+const NON_ARCHITECTURE_TYPES: ReadonlySet<KnowledgeType> = new Set([
+  'pitfall',
+  'problem',
+  'problem_solution',
+  'outcome',
+  'tool_usage',
+  'process_spec',
+  'code_snippet',
+  'best_practice',
+]);
+
+const TYPE_MONO_MIN_DETAILS = 4;
+const TYPE_MONO_ARCH_RATIO = 0.85;
 
 export interface CoverageIssue {
   code: CoverageIssueCode;
@@ -247,6 +263,22 @@ export function assessProjectCoverage(
     });
   }
 
+  const archCount = details.filter((d) => d.type === 'architecture_design').length;
+  const nonArchCount = details.filter((d) =>
+    NON_ARCHITECTURE_TYPES.has(d.type),
+  ).length;
+  if (
+    details.length >= TYPE_MONO_MIN_DETAILS &&
+    archCount / details.length >= TYPE_MONO_ARCH_RATIO &&
+    nonArchCount === 0
+  ) {
+    issues.push({
+      code: 'type_mono',
+      severity: 'medium',
+      message: `类型偏斜：${details.length} 张明细中 architecture_design=${archCount}（≥${Math.round(TYPE_MONO_ARCH_RATIO * 100)}%）且非架构明细为 0 — 从会话/失败路径/配置拆至少 1 张 pitfall|tool_usage|problem 等；禁止编造；禁止再加同质架构卡充数`,
+    });
+  }
+
   const blocking = issues.filter(
     (i) => i.severity === 'high' || i.severity === 'medium',
   );
@@ -448,6 +480,11 @@ function buildNextActions(
   }
   if (issues.some((i) => i.code === 'thin_topic')) {
     actions.push('主题明细不足：继续四阶段盘点（模块/阶段/可观测/迁移/踩坑），禁止只改总览');
+  }
+  if (issues.some((i) => i.code === 'type_mono')) {
+    actions.push(
+      '类型偏斜 type_mono：有证据则 capture 至少 1 张非架构卡（pitfall/tool_usage/problem…）；无证据则勿宣称 complete、禁止编造；勿再堆 architecture_design',
+    );
   }
   if (actions.length === 0 && hubs.length > 0) {
     actions.push('覆盖已合格：增量写入时仍须 search → 深挖 → capture → kmind_coverage 验收');

@@ -29,6 +29,7 @@ KMind 若只做本地 Markdown / SQLite 存储，与「文件夹 + 数据库」�
 | 维度 | 来源 | 作用 |
 |------|------|------|
 | **Coverage** | `kmind_coverage` / `complete` / `nextActions` | 深度 vs 目录空文；驱动补写 |
+| **类型偏斜** | coverage `type_mono`（明细≥4 且几乎全是 architecture、零非架构） | 拦「全架构骨架」假完工；催补有证据的 pitfall/tool/problem，不自动编造 |
 | **图健康** | health/lint（孤岛、浅卡、problem 未闭环、缺锚点等） | 结构是否可检索、可闭环 |
 
 **后做**：召回成功率埋点 / 人工打分（本地无云端反馈回路，成本高）。

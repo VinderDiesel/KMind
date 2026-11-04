@@ -144,7 +144,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   {
     name: 'kmind_coverage',
     description:
-      'Assess whether a project/topic is dug deep vs catalog-only. Returns complete=false when hubs are empty, children shallow, duplicate overviews, or missing anchors. REQUIRED before claiming「知识已完整」after 整理某系统; never treat search hits alone as complete.',
+      'Assess whether a project/topic is dug deep vs catalog-only. Returns complete=false when hubs are empty, children shallow, duplicate overviews, missing anchors, or type_mono (almost all architecture_design details). REQUIRED before claiming「知识已完整」after 整理某系统; never treat search hits alone as complete.',
     effect: 'read',
     inputSchema: {
       type: 'object',
@@ -194,7 +194,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   {
     name: 'kmind_capture_suggest',
     description:
-      'ADR-002 smart-write suggestions (read): duplicates, type, hub related, solves/verifies links, missing anchors, quality preview. Show to human; on confirm merge suggestion.apply into kmind_capture (re-send = accept). Does not write.',
+      'ADR-002 smart-write suggestions (read): duplicates, type retype (do not default architecture_design), hub related, solves/verifies links, missing anchors, quality preview; proposedCapture includes guidance/scaffold. Show to human; on confirm merge suggestion.apply into kmind_capture (re-send = accept). Does not write.',
     effect: 'read',
     inputSchema: {
       type: 'object',

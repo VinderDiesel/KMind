@@ -87,4 +87,36 @@ describe('buildCaptureSuggestions', () => {
     );
     expect(report.suggestions.some((s) => s.kind === 'anchors')).toBe(true);
   });
+
+  it('given architecture mislabeled pitfall when suggest then retype', async () => {
+    const assetTypes = await createAssetTypeRegistry();
+    const report = await buildCaptureSuggestions(
+      {
+        title: 'MCP长驻未重启踩坑',
+        project: 'kmind',
+        type: 'architecture_design',
+        content:
+          '## 现象\n调用仍走旧二进制\n## 根因\n进程长驻未重启\n## 正确做法\n改完须重启 MCP\n',
+      },
+      { store, assetTypes },
+    );
+    const typeSug = report.suggestions.find((s) => s.kind === 'type');
+    expect(typeSug?.apply.type).toBe('pitfall');
+    expect(report.proposedCapture?.type).toBe('pitfall');
+    expect(report.proposedCapture?.scaffold).toMatch(/现象/);
+    expect(report.proposedCapture?.guidance).toBeTruthy();
+  });
+
+  it('given missing type when suggest then require explicit type', async () => {
+    const report = await buildCaptureSuggestions(
+      {
+        title: '某模块说明',
+        project: 'solo',
+        content: '## 实现方式\n一般描述\n## 注意事项\na\n## 红线规避\nb\n',
+      },
+      { store },
+    );
+    const typeSug = report.suggestions.find((s) => s.kind === 'type');
+    expect(typeSug?.message).toMatch(/禁止默认 architecture_design|请显式/);
+  });
 });

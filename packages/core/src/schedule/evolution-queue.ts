@@ -57,6 +57,7 @@ export interface EvolutionScanResult {
 /**
  * Scan lint + per-project coverage into an evolution todo queue (ADR-002).
  * Diagnosis only — does not capture or rewrite assets.
+ * Coverage codes (including `type_mono`) become open todos for agents to fix manually.
  */
 export async function runEvolutionScan(
   vault: Vault,

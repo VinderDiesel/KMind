@@ -56,6 +56,9 @@ export const CaptureSuggestReportSchema = z.object({
       related: z.array(z.string()).default([]),
       links: z.array(AssetLinkSchema).default([]),
       anchors: z.array(CodeAnchorSchema).default([]),
+      /** From asset-type registry — prefer over hand-copied 实现方式三件套. */
+      guidance: z.string().optional(),
+      scaffold: z.string().optional(),
     })
     .optional(),
   hints: z.array(z.string()).default([]),

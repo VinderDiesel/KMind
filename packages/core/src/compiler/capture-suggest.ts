@@ -47,13 +47,15 @@ export async function buildCaptureSuggestions(
   const anchors = normalizeAnchors(input.anchors);
 
   const classifier = new HeuristicClassifier(deps.assetTypes);
-  const classified = await classifier.classify({
+  // Heuristic WITHOUT typeHint — typeHint would short-circuit and hide mislabels.
+  const heuristic = await classifier.classify({
     title,
     content,
     rawPath: 'manual/suggest',
-    typeHint: input.type,
   });
-  const type = input.type ?? classified.type;
+  const patternType = detectTypeFromContent(`${title}\n${content}`);
+  const suggestedType = pickSuggestedType(heuristic.type, heuristic.confidence, patternType);
+  const type = input.type ?? suggestedType ?? heuristic.type;
 
   const suggestions: CaptureSuggestion[] = [];
   let seq = 1;
@@ -86,25 +88,48 @@ export async function buildCaptureSuggestions(
   }
 
   // —— Type ——
-  if (!input.type && classified.confidence >= 0.65) {
-    suggestions.push({
-      id: nextId('type'),
-      kind: 'type',
-      message: `建议 type=${classified.type}（启发式 confidence=${classified.confidence.toFixed(2)}）`,
-      confidence: classified.confidence,
-      apply: { type: classified.type },
-    });
+  if (!input.type) {
+    if (suggestedType && (heuristic.confidence >= 0.65 || patternType)) {
+      suggestions.push({
+        id: nextId('type'),
+        kind: 'type',
+        message: `建议 type=${suggestedType}（启发式 ${heuristic.confidence.toFixed(2)}${patternType ? `；正文模式→${patternType}` : ''}）— 请显式传入 type，禁止默认 architecture_design`,
+        confidence: Math.max(heuristic.confidence, patternType ? 0.8 : 0),
+        apply: { type: suggestedType },
+      });
+    } else {
+      suggestions.push({
+        id: nextId('type'),
+        kind: 'type',
+        message:
+          '未传 type：请先 kmind_asset_types 选类型再 capture；禁止默认 architecture_design',
+        confidence: 0.85,
+        apply: {},
+      });
+    }
   } else if (
-    input.type &&
-    classified.type !== input.type &&
-    classified.confidence >= 0.8
+    suggestedType &&
+    suggestedType !== input.type &&
+    (heuristic.confidence >= 0.75 || Boolean(patternType))
   ) {
     suggestions.push({
       id: nextId('type'),
       kind: 'type',
-      message: `传入 type=${input.type}，正文更像 ${classified.type}（${classified.confidence.toFixed(2)}）— 请确认`,
-      confidence: classified.confidence * 0.9,
-      apply: { type: classified.type },
+      message: `传入 type=${input.type}，正文更像 ${suggestedType}${patternType ? `（模式命中）` : `（${heuristic.confidence.toFixed(2)}）`} — 请改 type 并换 scaffold，勿套架构三件套`,
+      confidence: Math.min(0.95, Math.max(heuristic.confidence, patternType ? 0.85 : 0) * 0.95),
+      apply: { type: suggestedType },
+    });
+  } else if (
+    input.type === 'architecture_design' &&
+    patternType &&
+    patternType !== 'architecture_design'
+  ) {
+    suggestions.push({
+      id: nextId('type'),
+      kind: 'type',
+      message: `architecture_design 疑似误标：正文模式更像 ${patternType} — 请改 type 并按该类型 scaffold 重写`,
+      confidence: 0.88,
+      apply: { type: patternType },
     });
   }
 
@@ -215,8 +240,19 @@ export async function buildCaptureSuggestions(
   }
 
   const proposed = buildProposed(type, related, links, anchors, suggestions);
+  const proposedDef = deps.assetTypes?.get(proposed.type);
+  const proposedCapture = {
+    ...proposed,
+    ...(proposedDef?.guidance
+      ? { guidance: proposedDef.guidance.slice(0, 400) }
+      : {}),
+    ...(proposedDef?.scaffold
+      ? { scaffold: proposedDef.scaffold.trim().slice(0, 500) }
+      : {}),
+  };
   const hints = [
-    '向人展示 suggestions；确认后把 apply 字段合并进 kmind_capture（回灌即确认）',
+    '向人展示 suggestions；确认后把 apply 字段（尤其 type）合并进 kmind_capture（回灌即确认）',
+    '禁止默认 architecture_design；按 proposedCapture.guidance/scaffold 写正文',
     ...quality.hints.slice(0, 3),
   ];
 
@@ -226,13 +262,39 @@ export async function buildCaptureSuggestions(
     project,
     type: proposed.type,
     suggestions,
-    proposedCapture: proposed,
+    proposedCapture,
     hints,
   });
 }
 
 function normalizeTitle(t: string): string {
   return t.replace(/\s+/g, '').toLowerCase();
+}
+
+/** Content-pattern overrides when agents mislabel everything as architecture. */
+function detectTypeFromContent(text: string): KnowledgeType | undefined {
+  if (/踩坑|pitfall|gotcha|回归|误用|长驻未重启/i.test(text)) return 'pitfall';
+  if (/##\s*症状|未解决|待排查|复现步骤|open\s*issue/i.test(text)) return 'problem';
+  if (/##\s*结果|验证通过|实施结果|残留风险/i.test(text)) return 'outcome';
+  if (/how to (use|run|install)|工具使用|cli\b.*安装|kmind\s+\w+/i.test(text)) {
+    return 'tool_usage';
+  }
+  if (/checklist|流程规范|workflow|提交前必须/i.test(text)) return 'process_spec';
+  if (/最佳实践|best practice/i.test(text)) return 'best_practice';
+  return undefined;
+}
+
+function pickSuggestedType(
+  heuristicType: KnowledgeType,
+  confidence: number,
+  patternType: KnowledgeType | undefined,
+): KnowledgeType | undefined {
+  if (patternType) return patternType;
+  if (confidence >= 0.65 && heuristicType !== 'architecture_design') {
+    return heuristicType;
+  }
+  if (confidence >= 0.8) return heuristicType;
+  return undefined;
 }
 
 function normalizeAnchors(

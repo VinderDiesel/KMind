@@ -437,7 +437,7 @@ async function dispatch(
           suggestions: suggestReport.suggestions,
           proposedCapture: suggestReport.proposedCapture,
           suggestion:
-            '先看 suggestions/proposedCapture；与人对齐后把 apply 字段回灌 kmind_capture。增量须写深：锚点+实现/注意/红线；related/links 挂图；整理后 kmind_coverage。',
+            '先看 suggestions/proposedCapture（含 guidance/scaffold）；与人对齐后把 apply（尤其 type）回灌 kmind_capture。禁止默认 architecture_design；按类型 scaffold 写深；related/links 挂图；整理后 kmind_coverage（注意 type_mono）。',
         };
       }
       const blob = new BlobStore(ctx.vault.rawDir);

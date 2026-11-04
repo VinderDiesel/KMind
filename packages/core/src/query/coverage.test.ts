@@ -119,6 +119,88 @@ describe('assessProjectCoverage', () => {
     expect(report.nextActions[0]).toContain('覆盖已合格');
   });
 
+  it('given 3 architecture details when assess then no type_mono', () => {
+    const kids = [1, 2, 3].map((n) =>
+      asset({
+        title: `问数 模块${n}`,
+        body: DEEP_BODY,
+        related: [],
+      }),
+    );
+    const hub = asset({
+      title: '问数系统知识总览',
+      body: '## 导航\n- a\n\n## 红线规避\n- x\n',
+      related: kids.map((k) => k.id),
+    });
+    const report = assessProjectCoverage([hub, ...kids], {
+      project: 'meta-brain',
+      topic: '问数',
+    });
+    expect(report.issues.some((i) => i.code === 'type_mono')).toBe(false);
+    expect(report.complete).toBe(true);
+  });
+
+  it('given 4 architecture-only details when assess then type_mono blocks complete', () => {
+    const kids = [1, 2, 3, 4].map((n) =>
+      asset({
+        title: `问数 模块${n}`,
+        body: DEEP_BODY,
+        related: [],
+      }),
+    );
+    const hub = asset({
+      title: '问数系统知识总览',
+      body: '## 导航\n- a\n\n## 红线规避\n- x\n',
+      related: kids.map((k) => k.id),
+    });
+    const report = assessProjectCoverage([hub, ...kids], {
+      project: 'meta-brain',
+      topic: '问数',
+    });
+    expect(report.complete).toBe(false);
+    expect(report.issues.some((i) => i.code === 'type_mono')).toBe(true);
+    expect(report.nextActions.some((a) => a.includes('type_mono'))).toBe(true);
+  });
+
+  it('given architecture cluster plus pitfall when assess then no type_mono', () => {
+    const kids = [1, 2, 3].map((n) =>
+      asset({
+        title: `问数 模块${n}`,
+        body: DEEP_BODY,
+        related: [],
+      }),
+    );
+    const pit = createKnowledgeAsset({
+      title: '问数 JOIN 踩坑',
+      type: 'pitfall',
+      project: 'meta-brain',
+      body: `${DEEP_BODY}
+
+## 现象
+问数偶发空结果且无澄清提示；用户以为无数据，实际是图边缺失。
+
+## 根因
+JOIN 路径丢失后静默返回空集，未走澄清槽位。
+
+## 正确做法
+缺边时必须 clarify；禁止静默空结果。
+`,
+      related: [],
+    });
+    const hub = asset({
+      title: '问数系统知识总览',
+      body: '## 导航\n- a\n\n## 红线规避\n- x\n',
+      related: [...kids.map((k) => k.id), pit.id],
+    });
+    const report = assessProjectCoverage([hub, ...kids, pit], {
+      project: 'meta-brain',
+      topic: '问数',
+    });
+    expect(report.issues.some((i) => i.code === 'type_mono')).toBe(false);
+    expect(report.issues.map((i) => i.code)).not.toContain('type_mono');
+    expect(report.complete).toBe(true);
+  });
+
   it('given duplicate overview titles when assess then duplicate_overview', () => {
     const a = asset({
       title: '问数系统知识总览',
