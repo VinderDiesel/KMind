@@ -5,10 +5,20 @@ KMind is a local-first **intelligence flywheel** (smart write → structured rec
 KMind is a local-first knowledge system:
 
 ```
-CLI / MCP Server / UI HTTP → @kmind/core → Vault (~/.kmind)
+CLI / MCP Server / UI HTTP → @kmind/core → Vault
                               ↑
                          adapters (interface only)
 ```
+
+**Vault root resolution** (`resolveVaultRoot`):
+
+1. Explicit `--vault` / MCP `vaultRoot`
+2. Nearest `.kmind-knowledge/config.yaml` walking up from cwd (`kmind init --project`)
+3. Fallback `~/.kmind`
+
+Project vault git allowlist: `knowledge/`, `ontology/`, `asset-types/`, `config.yaml`, `FEATURE_TREE.md`, `.gitignore`.  
+Never commit: `raw/`, `index.db`, `audit/`, `diagnostics/`. Sync rides normal `git pull`/`push`; `.githooks` reindex after merge/checkout and stage knowledge on commit. Asset ids: `k-YYYY-MM-DD-NNN-<4hex>` (author suffix from `KMIND_AUTHOR` / hostname).  
+`FEATURE_TREE.md` is ensured on `kmind init --project` (and `kmind feature-tree ensure`) so teams can track module coverage beyond structural `kmind_coverage`.
 
 ## Layers
 
@@ -18,7 +28,7 @@ CLI / MCP Server / UI HTTP → @kmind/core → Vault (~/.kmind)
 
 ## Core modules
 
-- `storage` — Vault, Markdown, SQLite, blob
+- `storage` — Vault, `resolveVaultRoot`, Markdown, SQLite, blob
 - `ontology` — load / validate / evolve
 - `asset-types` — ADR-001 data-driven type registry (builtin ∪ vault deep merge; templates + quality rules)
 - `compiler` — capture → classify → **confidence gate** → map → graph → embed → index
@@ -27,6 +37,7 @@ CLI / MCP Server / UI HTTP → @kmind/core → Vault (~/.kmind)
 - `query` — fulltext / structured / graph / semantic / hybrid / ego / **context-pack** (`kmind_pack`)
 - `health` — lint rules
 - `schedule` / **evolution-queue** — cron maintenance + ADR-002 coverage/lint todo queue (`audit/evolution-queue.json`)
+- `observability` — MCP tool audit (`audit/YYYY-MM-DD.jsonl`) + **search/pack query logs** (`audit/search-queries/YYYY-MM-DD.jsonl`, every CLI/MCP/UI recall; not committed)
 - `migration` — export / import
 
 ## Local UI (`kmind ui`)

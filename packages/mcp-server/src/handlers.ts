@@ -12,6 +12,7 @@ import {
   Exporter,
   Importer,
   AuditLogger,
+  appendSearchQueryLog,
   sanitizeTitle,
   assessCaptureQuality,
   assessProjectCoverage,
@@ -104,13 +105,48 @@ async function dispatch(
   switch (name) {
     case 'kmind_search': {
       const key = `search:${JSON.stringify(args)}`;
+      const query = String(args.query ?? '');
+      const project =
+        typeof args.project === 'string' && args.project.trim()
+          ? args.project.trim()
+          : undefined;
+      const type = args.type as never;
+      const limit = Number(args.limit ?? 10);
       const hit = cache.get(key);
-      if (hit) return hit;
+      if (hit) {
+        const cached = hit as Array<{
+          id: string;
+          title?: string;
+          score: number;
+          matchedBy?: string[];
+        }>;
+        // Cache hits skip engine.search — still append a query log for every MCP call.
+        await appendSearchQueryLog(ctx.vault.auditDir, {
+          kind: 'search',
+          query: query.trim(),
+          project,
+          type,
+          limit,
+          resultCount: cached.length,
+          topHits: cached.slice(0, 5).map((r) => ({
+            id: r.id,
+            score: r.score,
+            matchedBy: r.matchedBy,
+            title: r.title,
+          })),
+          empty: cached.length === 0,
+          latencyMs: 0,
+          source: 'mcp',
+          cacheHit: true,
+        });
+        return hit;
+      }
       const results = await ctx.engine.search({
-        query: String(args.query ?? ''),
-        type: args.type as never,
-        project: args.project as string | undefined,
-        limit: Number(args.limit ?? 10),
+        query,
+        type,
+        project,
+        limit,
+        source: 'mcp',
       });
       const payload = results.map((r) => ({
         id: r.asset.id,
@@ -234,6 +270,7 @@ async function dispatch(
             : undefined,
         depth: Number.isFinite(depth) ? depth : 1,
         neighborCap: Number.isFinite(neighborCap) ? neighborCap : 24,
+        source: 'mcp',
       });
     }
     case 'kmind_evolution_queue': {

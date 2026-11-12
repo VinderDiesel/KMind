@@ -9,6 +9,7 @@ import {
 import {
   createQueryEngine,
   createVault,
+  resolveVaultRoot,
   SqliteStore,
   type QueryEngine,
   type Vault,
@@ -39,9 +40,11 @@ export interface McpHttpServer {
 
 /**
  * Open vault + store + query engine for MCP.
+ * Vault root: explicit → nearest `.kmind-knowledge/` → `~/.kmind`.
  */
 export async function createMcpRuntime(vaultRoot?: string): Promise<McpRuntime> {
-  const vault = createVault(vaultRoot);
+  const root = await resolveVaultRoot({ explicit: vaultRoot });
+  const vault = createVault(root);
   if (!(await vault.exists())) {
     await vault.init();
   }

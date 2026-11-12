@@ -6,6 +6,7 @@ description: >-
   整理到kmind / 把某系统写入知识库, or after a confirmed decision, pitfall,
   architecture choice, or reusable practice. Also use proactively after closed
   decisions — depth is default, user need not say「写详细」.
+  Before implementing modules/tables/architecture in a team repo: kmind_pack first.
 ---
 
 # KMind 高质量写入
@@ -13,6 +14,16 @@ description: >-
 只沉淀可复利结论；整段会话留在 raw，不直接升知识。
 
 **默认就要写完整、写详细——用户不必每次说明「要明细」。** 系统闸门会拒写目录空文与未挂图的增量卡。
+
+## 团队共享 vault（强制）
+
+- 优先仓库内 **`.kmind-knowledge/`**（`kmind init --project`）；否则 `~/.kmind`。
+- **功能树**：项目 vault 根目录始终维护 **`FEATURE_TREE.md`**（init/adapters `--project` 会 ensure）。整理前对照表盘点；capture 后把行标为 `done` + 资产 id。可用 `kmind feature-tree ensure`。
+- **写代码前查库**：改模块 / 建表 / 定方案 / 疑似踩坑 → 先 `kmind_pack`（或 `kmind_search`），禁止盲写导致重复造轮子。
+- **定案后沉淀**：决策闭合、踩坑、可复用实践 → `kmind_capture_suggest` → `kmind_capture`；用户不必说「记一下」。
+- 知识随 git 流动；禁止把 `raw/`、`index.db`、密钥提交进共享仓。
+- 禁止把 Skills / 工具安装说明写入业务知识卡。
+- 遵守仓库 `AGENTS.md` 中的 `<!-- kmind:agent-protocol -->` 区块。
 
 **硬要求（系统拒写）：**
 

@@ -15,10 +15,13 @@ description: >-
 | 问法 | 用 | 工具 |
 |:---|:---|:---|
 | 怎么实现 / 谁调用 / 改了会炸哪 / 某符号在哪 | **Codegraph** | `codegraph_explore` |
-| 以前怎么定 / 有没有坑 / 最佳实践 / 搜知识 | **KMind** | `kmind_search`（必要时 `kmind_related`） |
+| 以前怎么定 / 有没有坑 / 最佳实践 / 搜知识 | **KMind** | 优先 `kmind_pack`；列候选用 `kmind_search` |
 | 沉淀决策且涉及代码 | 先 KMind 判重，可选 Codegraph 取锚点，再 capture | 见下方 |
+| 动手改模块/建表前 | **先 KMind** | `kmind_pack` 防团队重复造轮子 |
 
 无 `.codegraph/` 时：结构问题改用 Read/Grep；KMind 照常可用。不要替用户跑 `codegraph init`，可提示一句。
+
+团队仓若有 `.kmind-knowledge/`，MCP/CLI 自动用它（无需改 skill 参数）。
 
 ## 结构问题（Codegraph）
 
@@ -28,17 +31,18 @@ description: >-
 
 ## 经验问题（KMind）
 
-1. `kmind_search`（可加 `type` / `project`）。
+1. 优先 `kmind_pack`（focus + 邻域 + 锚点）；仅列候选时用 `kmind_search`。
 2. 命中后需要邻域 → `kmind_related`。
 3. 不要把会话全文当答案；优先引用资产结论。
+4. **写代码前**若涉及已有方案/表结构/踩坑，必须先走本步。
 
 ## 沉淀（双图协作）
 
 在 `kmind-capture` 流程上增加可选锚点：
 
-1. `kmind_search` 判重（同 kmind-capture）。
+1. `kmind_pack` / `kmind_search` 判重（同 kmind-capture）。
 2. 若决策绑定具体实现：对相关符号跑一次 `codegraph_explore`（有索引才做）。
-3. `kmind_capture` 正文在模板末尾追加 **代码锚点**（勿粘贴大段源码）：
+3. `kmind_capture_suggest` → 确认 → `kmind_capture`；正文末尾追加 **代码锚点**（勿粘贴大段源码）：
 
 ```markdown
 ## 代码锚点

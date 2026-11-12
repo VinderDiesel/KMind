@@ -11,7 +11,13 @@ import {
   withCodeAnchorsMetadata,
 } from './code-anchors.js';
 import { OntologyMapper } from './ontology-mapper.js';
-import { GraphBuilder, nextKnowledgeId } from './graph-builder.js';
+import {
+  GraphBuilder,
+  knowledgeIdDayPrefix,
+  nextKnowledgeId,
+  parseKnowledgeIdSeq,
+} from './graph-builder.js';
+
 import { LocalEmbedder, type Embedder } from './embedder.js';
 import type { OntologyRegistry } from '../ontology/ontology-registry.js';
 import type { OntologyEvolver } from '../ontology/ontology-evolver.js';
@@ -391,18 +397,16 @@ function formatBody(
 
 /**
  * Continue daily knowledge id sequence from existing assets (avoid overwriting).
+ * Understands both `k-YYYY-MM-DD-NNN` and `k-YYYY-MM-DD-NNN-<4hex>`.
  */
 async function nextSeqForToday(store: SqliteStore, date: Date): Promise<number> {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(date.getUTCDate()).padStart(2, '0');
-  const prefix = `k-${y}-${m}-${d}-`;
+  const prefix = knowledgeIdDayPrefix(date);
   const assets = await store.queryAssets({ limit: 100_000 });
   let max = 0;
   for (const asset of assets) {
-    if (!asset.id.startsWith(prefix)) continue;
-    const n = Number.parseInt(asset.id.slice(prefix.length), 10);
-    if (Number.isFinite(n)) max = Math.max(max, n);
+    const n = parseKnowledgeIdSeq(asset.id, prefix);
+    if (n !== null) max = Math.max(max, n);
   }
   return max + 1;
 }
+

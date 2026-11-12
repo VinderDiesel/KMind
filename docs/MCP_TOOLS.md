@@ -4,7 +4,7 @@ Effect levels: `read` | `write` | `sensitive`
 
 | Tool | Effect | Description |
 |:---|:---|:---|
-| `kmind_search` | read | Hybrid search; pass `k-YYYY-MM-DD-NNN` for exact id lookup; manual captures ranked above session dumps |
+| `kmind_search` | read | Hybrid search; pass `k-YYYY-MM-DD-NNN` or `k-YYYY-MM-DD-NNN-<4hex>` for exact id lookup; manual captures ranked above session dumps |
 | `kmind_pack` | read | **ADR-002 Context Pack:** focus + ego + anchors + problem status (structured recall for Agents; not LLM answers). Prefer over raw search when answering from vault |
 | `kmind_get` | read | Fetch one asset by exact id (prefer over search when id is known) |
 | `kmind_related` | read | Related assets by graph |

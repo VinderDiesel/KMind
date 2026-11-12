@@ -9,6 +9,7 @@ import type {
 import {
   AssetLinkSchema,
   CodeAnchorSchema,
+  KnowledgeAssetIdPattern,
   KnowledgeTypeIdSchema,
   SessionRecordSchema,
 } from '@kmind/shared';
@@ -179,7 +180,7 @@ function parseRelatedHint(raw: unknown): string[] | undefined {
   const ids = raw
     .filter((x): x is string => typeof x === 'string')
     .map((x) => x.trim())
-    .filter((x) => /^k-\d{4}-\d{2}-\d{2}-\d{3}$/.test(x));
+    .filter((x) => KnowledgeAssetIdPattern.test(x));
   return ids.length > 0 ? [...new Set(ids)] : undefined;
 }
 

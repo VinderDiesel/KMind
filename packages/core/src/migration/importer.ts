@@ -213,9 +213,10 @@ export async function ensureParent(filePath: string): Promise<void> {
 
 function allocateRenameId(originalId: string, existing: Set<string>): string {
   const day = new Date().toISOString().slice(0, 10);
+  const suffix = Date.now().toString(16).slice(-4);
   let n = 1;
   while (n < 10_000) {
-    const candidate = `k-${day}-${String(n).padStart(3, '0')}`;
+    const candidate = `k-${day}-${String(n).padStart(3, '0')}-${suffix}`;
     if (!existing.has(candidate) && candidate !== originalId) {
       return candidate;
     }

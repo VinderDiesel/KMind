@@ -1,9 +1,13 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PROJECT_VAULT_DIRNAME, projectVaultPath } from '@kmind/core';
+import { KMindError } from '@kmind/shared';
 import type { AppContext } from '../context.js';
 import { success, fail } from '../exit.js';
-import { KMindError } from '@kmind/shared';
+import { ensureProjectFeatureTree } from './feature-tree.js';
+import { findGitRoot } from './find-git-root.js';
+import { installProjectAgentContext } from './project-context.js';
 import { installSkillsForAdapter } from './skills.js';
 
 /**
@@ -13,15 +17,28 @@ export function resolveCliEntry(): string {
   return path.resolve(fileURLToPath(new URL('../index.js', import.meta.url)));
 }
 
+export interface ResolveMcpLaunchOptions {
+  cliEntry?: string;
+  /** Absolute vault root; injects `--vault <path>` before `mcp-serve`. */
+  vault?: string;
+}
+
 /**
- * Rewrite kmind MCP server entries to `node <cli> mcp-serve`.
+ * Rewrite kmind MCP server entries to `node <cli> [--vault <path>] mcp-serve`.
  * Templates may still use `command: "kmind"` as a placeholder.
  */
 export function withResolvedMcpLaunch(
   content: Record<string, unknown>,
-  cliEntry = resolveCliEntry(),
+  options: ResolveMcpLaunchOptions | string = {},
 ): Record<string, unknown> {
-  const launch = { command: 'node', args: [cliEntry, 'mcp-serve'] };
+  const opts: ResolveMcpLaunchOptions =
+    typeof options === 'string' ? { cliEntry: options } : options;
+  const cliEntry = opts.cliEntry ?? resolveCliEntry();
+  const args =
+    opts.vault && opts.vault.length > 0
+      ? [cliEntry, '--vault', path.resolve(opts.vault), 'mcp-serve']
+      : [cliEntry, 'mcp-serve'];
+  const launch = { command: 'node', args };
   const out = structuredClone(content) as Record<string, unknown>;
   for (const key of ['mcpServers', 'mcp_servers'] as const) {
     const servers = out[key];
@@ -52,13 +69,23 @@ export async function cmdAdaptersList(ctx: AppContext): Promise<void> {
   success(rows, ctx.json);
 }
 
+export interface AdaptersInstallOptions {
+  skipSkills?: boolean;
+  /**
+   * Pin MCP to repo `.kmind-knowledge/` and write project-local config when possible
+   * (Cursor: `<repo>/.cursor/mcp.json`).
+   */
+  project?: boolean;
+  cwd?: string;
+}
+
 /**
  * Install MCP config (+ bundled Agent Skills) for a named adapter.
  */
 export async function cmdAdaptersInstall(
   ctx: AppContext,
   name: string,
-  options?: { skipSkills?: boolean },
+  options: AdaptersInstallOptions = {},
 ): Promise<void> {
   const adapter = ctx.adapters.find((a) => a.name === name);
   if (!adapter) {
@@ -72,12 +99,52 @@ export async function cmdAdaptersInstall(
       ctx.json,
     );
   }
+
+  const cwd = options.cwd ?? process.cwd();
+  let vaultForMcp: string | undefined;
+  let targetPath = adapter.getMcpConfig().targetPath;
+  let repoRoot: string | undefined;
+
+  if (options.project) {
+    repoRoot = (await findGitRoot(cwd)) ?? undefined;
+    if (!repoRoot) {
+      fail(
+        new KMindError('adapters install --project requires a git repository', {
+          category: 'CONFIG_ERROR',
+          severity: 'high',
+          retryable: false,
+          suggestion: 'cd into the business repo, run `kmind init --project`, then retry',
+        }),
+        ctx.json,
+      );
+    }
+    vaultForMcp = projectVaultPath(repoRoot);
+    try {
+      await fs.access(path.join(vaultForMcp, 'config.yaml'));
+    } catch {
+      fail(
+        new KMindError(`Project vault missing: ${vaultForMcp}`, {
+          category: 'CONFIG_ERROR',
+          severity: 'high',
+          retryable: false,
+          suggestion: 'Run `kmind init --project` in the repo root first',
+        }),
+        ctx.json,
+      );
+    }
+    if (name === 'cursor') {
+      targetPath = path.join(repoRoot, '.cursor', 'mcp.json');
+    }
+  }
+
   const tpl = adapter.getMcpConfig();
-  const content = withResolvedMcpLaunch(tpl.content);
-  await fs.mkdir(path.dirname(tpl.targetPath), { recursive: true });
+  const content = withResolvedMcpLaunch(tpl.content, {
+    vault: vaultForMcp,
+  });
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
   let existing: Record<string, unknown> = {};
   try {
-    existing = JSON.parse(await fs.readFile(tpl.targetPath, 'utf8')) as Record<
+    existing = JSON.parse(await fs.readFile(targetPath, 'utf8')) as Record<
       string,
       unknown
     >;
@@ -85,26 +152,49 @@ export async function cmdAdaptersInstall(
     existing = {};
   }
   const merged = deepMerge(existing, content);
-  await fs.writeFile(tpl.targetPath, JSON.stringify(merged, null, 2), 'utf8');
+  await fs.writeFile(targetPath, JSON.stringify(merged, null, 2), 'utf8');
 
   let skills: Awaited<ReturnType<typeof installSkillsForAdapter>> = [];
-  if (!options?.skipSkills) {
+  if (!options.skipSkills) {
     try {
-      skills = await installSkillsForAdapter(name);
+      skills = await installSkillsForAdapter(name, {
+        project: options.project,
+        cwd: repoRoot ?? cwd,
+      });
     } catch {
       skills = [];
+    }
+  }
+
+  let agentContext;
+  let featureTree;
+  if (options.project && repoRoot && vaultForMcp) {
+    try {
+      featureTree = await ensureProjectFeatureTree(vaultForMcp);
+    } catch {
+      featureTree = undefined;
+    }
+    try {
+      agentContext = await installProjectAgentContext(repoRoot);
+    } catch {
+      agentContext = undefined;
     }
   }
 
   success(
     {
       installed: true,
-      targetPath: tpl.targetPath,
-      content,
+      targetPath,
+      vault: vaultForMcp ?? null,
+      vaultDirname: options.project ? PROJECT_VAULT_DIRNAME : null,
+      featureTree,
+      content: merged,
       skills,
-      hint:
-        skills.length > 0
-          ? 'MCP + skills installed. Restart the terminal (or /reload-skills).'
+      agentContext,
+      hint: options.project
+        ? `MCP pinned to ${vaultForMcp}. Keep FEATURE_TREE.md updated when capturing. Reload Cursor / new Agent chat; kmind_status must show this vaultPath.`
+        : skills.length > 0
+          ? 'MCP + skills installed. Restart the terminal (or /reload-skills). Without --project, MCP uses cwd discovery → often ~/.kmind.'
           : 'MCP installed. Run `kmind skills install ' +
             name +
             '` to add Agent Skills.',

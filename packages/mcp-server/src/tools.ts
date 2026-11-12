@@ -16,7 +16,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   {
     name: 'kmind_search',
     description:
-      'Hybrid search over the local KMind knowledge base. Pass an asset id (k-YYYY-MM-DD-NNN) for exact lookup. Prefer project filter for curated recalls. Limit: local vault only.',
+      'Hybrid search over the local KMind knowledge base. Pass an asset id (k-YYYY-MM-DD-NNN or k-YYYY-MM-DD-NNN-<4hex>) for exact lookup. Prefer project filter for curated recalls. Limit: local vault only.',
     effect: 'read',
     inputSchema: {
       type: 'object',
@@ -63,7 +63,7 @@ export const MCP_TOOLS: McpToolDef[] = [
       properties: {
         id: {
           type: 'string',
-          description: 'Exact asset id (k-YYYY-MM-DD-NNN). Wins over query.',
+          description: 'Exact asset id (k-YYYY-MM-DD-NNN or …-NNN-<4hex>). Wins over query.',
         },
         query: {
           type: 'string',
@@ -91,7 +91,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   {
     name: 'kmind_get',
     description:
-      'Fetch one knowledge asset by exact id (k-YYYY-MM-DD-NNN). Use instead of search when you already know the id.',
+      'Fetch one knowledge asset by exact id (k-YYYY-MM-DD-NNN or …-NNN-<4hex>). Use instead of search when you already know the id.',
     effect: 'read',
     inputSchema: {
       type: 'object',

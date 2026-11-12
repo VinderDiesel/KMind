@@ -17,6 +17,7 @@ export async function cmdSearch(
     type: options.type as KnowledgeType | undefined,
     project: options.project,
     limit: options.limit ?? 10,
+    source: 'cli',
   });
   if (ctx.json) {
     success(results, true);

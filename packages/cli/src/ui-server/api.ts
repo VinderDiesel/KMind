@@ -127,7 +127,7 @@ export async function handleUiApi(
       return { status: 400, body: { error: 'Missing q' } };
     }
     const limit = clampInt(searchParams.get('limit'), 20, 1, 50);
-    const results = await engine.search({ query: q, limit });
+    const results = await engine.search({ query: q, limit, source: 'ui' });
     return {
       status: 200,
       body: {

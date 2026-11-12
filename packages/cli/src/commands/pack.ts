@@ -24,6 +24,7 @@ export async function cmdPack(
     type: options.type as never,
     depth: options.depth,
     neighborCap: options.neighborCap,
+    source: 'cli',
   });
   if (ctx.json) {
     success(pack, true);

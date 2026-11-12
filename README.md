@@ -30,10 +30,11 @@ Unify Claude Code, Cursor, Qoder, Codex & Kiro sessions into a queryable knowled
 |:---|:---|
 | **多终端插件式接入** | Adapter 模式接入 Claude Code、Cursor、Qoder、Codex、Kiro，新增终端通常少于 200 行 |
 | **会话自动捕获** | 从 AI 编程会话中提取知识候选，无需手动整理 |
+| **团队共享知识库** | `kmind init --project` → 仓内 `.kmind-knowledge/`；知识随 git 流动；hooks 自动 reindex；AGENTS 协议写入各 AI 工具 |
 | **七类知识资产** | 问题解决方案、最佳实践、架构设计、工具使用、踩坑记录、代码片段、流程规范 |
 | **知识图谱 + 本体** | 实体 / 概念 / 关系自动提取，本体 Schema 可扩展、可演化 |
 | **混合检索** | 全文 + 结构化 + 图谱遍历 + 语义向量，四路融合排序 |
-| **数据本地化** | Markdown + SQLite，零云端依赖，可用 Git 做版本管理 |
+| **数据本地化** | Markdown + SQLite，零云端依赖；个人 vault `~/.kmind` 或项目 vault `.kmind-knowledge/` |
 | **快速迁移** | 一键导出 / 导入 `tar.gz` |
 | **MCP 原生** | 作为 MCP Server 运行，支持 MCP 的 AI 工具即插即用 |
 
@@ -64,8 +65,21 @@ pnpm build
 
 ```bash
 kmind --help
-kmind init          # 默认 Vault：~/.kmind
+kmind init              # 默认 Vault：~/.kmind
+kmind init --project    # 团队共享：仓库内 .kmind-knowledge/ + AGENTS 合并 + git hooks
 ```
+
+**Vault 解析顺序**：`--vault` → 向上找 `.kmind-knowledge/config.yaml` → `~/.kmind`。
+
+**团队共享（一次初始化）**：在业务仓根执行 `kmind init --project`，然后 commit：
+
+- `.kmind-knowledge/knowledge|ontology|asset-types|config.yaml|FEATURE_TREE.md|.gitignore`（**不要** commit `raw/`、`index.db`）
+- `AGENTS.md`（及 CLAUDE / copilot 入口；已有文件会自动插入 KMind 协议区块）
+- `.githooks/`（`post-merge`/`post-checkout` → reindex；`pre-commit` → stage 知识路径）
+
+**功能树**：vault 根目录始终维护 `FEATURE_TREE.md`（`init --project` / `adapters install --project` / `kmind feature-tree ensure`）。整理知识时对照表补 `todo`→`done`+资产 id，避免只靠 coverage 假完整。
+
+之后同事只需 `git pull`；知识随代码流动，索引由 hooks 重建。可选 `KMIND_AUTHOR` 区分多人同日 id 后缀。
 
 若提示找不到命令，把 `~/.local/bin` 加入 PATH（zsh 示例）：
 
@@ -82,6 +96,12 @@ kmind adapters list
 
 # 写入该终端的 MCP，并把 kmind-capture 等 Skills 装到 ~/.…/skills（全局，任意项目可用）
 kmind adapters install cursor
+# 注意：不加 --project 时 MCP 常因 cwd 落到 ~/.kmind；project= 过滤 ≠ vault 隔离
+
+# 团队项目仓：钉死项目 vault（Cursor 写入 <repo>/.cursor/mcp.json）
+kmind init --project   # 若尚未创建 .kmind-knowledge/
+kmind adapters install cursor --project
+
 kmind adapters install claude-code
 kmind adapters install qoder
 kmind adapters install codex
@@ -92,9 +112,34 @@ kmind skills install --all
 
 # 仅装到当前仓库（便于团队 git 共享）
 kmind skills install cursor --project
+# --project 还会写入/合并 AGENTS.md / CLAUDE.md / .github/copilot-instructions.md
+#（已有文件保留原文，自动插入或更新 <!-- kmind:agent-protocol --> 区块）
 ```
 
-装完后**重启对应 AI 终端**（Claude Code 可用 `/reload-skills`）。规范 Skills 源在仓库 `skills/`；也可用社区工具 `npx skills add <repo>` 发现同目录。
+装完后**重启对应 AI 终端 / Reload Window**（Claude Code 可用 `/reload-skills`），再调 `kmind_status` 核对 `vaultPath` 是否为 `.kmind-knowledge`。规范 Skills 源在仓库 `skills/`；也可用社区工具 `npx skills add <repo>` 发现同目录。本仓库 Agent 全局规范见根目录 `AGENTS.md`。
+
+### 团队共享知识库（项目 Vault）
+
+解决「同仓多人各自踩坑、重复造轮子 / 重复建相似表」：知识进业务仓，随普通 `git pull` / PR 共享；人只需初始化一次。
+
+```bash
+# 在业务仓根目录（需已是 git 仓库）
+kmind init --project
+# 然后 commit .kmind-knowledge/（共享路径）+ AGENTS.md + .githooks/
+git add .kmind-knowledge AGENTS.md CLAUDE.md .githooks .github/copilot-instructions.md
+git commit -m "chore: add team KMind project vault"
+```
+
+| 行为 | 谁做 | 说明 |
+|:---|:---|:---|
+| 查知识 | Agent / MCP 自动 | 写模块前 `kmind_pack`；**须** `adapters install cursor --project` 钉死 `--vault`，勿只靠 `project=` |
+| 拉同事知识 | `git pull` | hooks：`post-merge` / `post-checkout` → `reindex` |
+| 沉淀 | Agent 定案后 capture | 落盘 `knowledge/`；`pre-commit` 自动 stage 允许路径 |
+| 推送 | 照常 `git push` | **不**静默 push；`raw/`、`index.db` 永不进 git |
+
+资产 id：`k-YYYY-MM-DD-NNN-<4hex>`（可用环境变量 `KMIND_AUTHOR` 固定后缀，防多人同日撞号）。
+
+验收步骤见 [docs/TEAM_VAULT_ACCEPTANCE.md](docs/TEAM_VAULT_ACCEPTANCE.md)；架构说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ### 启动 MCP Server
 
@@ -344,7 +389,7 @@ kmind ui
 默认路径 `~/.kmind/`，完全本地、Git 友好：
 
 ```
-~/.kmind/
+~/.kmind/   （或项目 `.kmind-knowledge/`）
 ├── knowledge/          # 知识资产（Markdown，源真相）
 │   ├── projects/
 │   └── global/
@@ -353,8 +398,13 @@ kmind ui
 │   └── ontology.yaml
 ├── asset-types/          # ADR-001 类型覆盖（可选 YAML）
 ├── index/              # SQLite 索引（可重建）
+├── audit/              # 本地可观测（勿提交 git）
+│   ├── YYYY-MM-DD.jsonl           # MCP 工具审计
+│   └── search-queries/YYYY-MM-DD.jsonl  # 每次 search/pack 查询日志
 └── config.yaml
 ```
+
+每次 `kmind search` / `kmind pack` / MCP `kmind_search`·`kmind_pack` / UI 搜索都会在**当前 vault** 的 `audit/search-queries/` 追加一行 JSONL（含 query、project、命中数、topHits、耗时、source；MCP 缓存命中也会记 `cacheHit:true`），用于回溯与检索优化。
 
 迁移：
 

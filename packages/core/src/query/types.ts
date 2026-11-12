@@ -14,6 +14,11 @@ export interface SearchQuery {
   tags?: string[];
   limit?: number;
   minConfidence?: number;
+  /**
+   * Optional caller channel for `audit/search-queries/` logs
+   * (e.g. `cli` | `mcp` | `ui`).
+   */
+  source?: string;
 }
 
 export interface SearchResult {

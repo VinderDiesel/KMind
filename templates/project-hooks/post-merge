@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+# KMind: rebuild index after git pull/merge (knowledge Markdown is source of truth).
+set -e
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+VAULT="$ROOT/.kmind-knowledge"
+[ -f "$VAULT/config.yaml" ] || exit 0
+if command -v kmind >/dev/null 2>&1; then
+  kmind --vault "$VAULT" reindex >/dev/null 2>&1 || true
+elif command -v pnpm >/dev/null 2>&1 && [ -f "$ROOT/package.json" ]; then
+  (cd "$ROOT" && pnpm exec kmind --vault "$VAULT" reindex >/dev/null 2>&1) || true
+fi
+exit 0

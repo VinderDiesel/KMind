@@ -11,6 +11,7 @@ import {
 import {
   AssetLinkSchema,
   CodeAnchorSchema,
+  KnowledgeAssetIdPattern,
   KnowledgeTypeIdSchema,
   KMindError,
 } from '@kmind/shared';
@@ -183,7 +184,7 @@ function parseRelatedOption(raw?: string): string[] | undefined {
   const ids = raw
     .split(/[,;\s]+/)
     .map((s) => s.trim())
-    .filter((s) => /^k-\d{4}-\d{2}-\d{2}-\d{3}$/.test(s));
+    .filter((s) => KnowledgeAssetIdPattern.test(s));
   return ids.length > 0 ? [...new Set(ids)] : undefined;
 }
 

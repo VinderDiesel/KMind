@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import os from 'node:os';
 import type { AssetLink, KnowledgeAsset } from '@kmind/shared';
 import type { MappedKnowledge } from './ontology-mapper.js';
 import type { SqliteStore } from '../storage/sqlite-store.js';
@@ -56,11 +58,53 @@ export class GraphBuilder {
 }
 
 /**
- * Generate next knowledge id for a given day: k-YYYY-MM-DD-NNN.
+ * 4-hex author fingerprint from KMIND_AUTHOR or hostname (multi-writer anti-collision).
  */
-export function nextKnowledgeId(date: Date, seq: number): string {
+export function authorIdSuffix(seed?: string): string {
+  const raw =
+    seed ??
+    process.env.KMIND_AUTHOR ??
+    process.env.USER ??
+    process.env.USERNAME ??
+    os.hostname() ??
+    'anon';
+  return createHash('sha256').update(raw).digest('hex').slice(0, 4);
+}
+
+/**
+ * UTC day prefix `k-YYYY-MM-DD-` for id allocation.
+ */
+export function knowledgeIdDayPrefix(date: Date): string {
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, '0');
   const d = String(date.getUTCDate()).padStart(2, '0');
-  return `k-${y}-${m}-${d}-${String(seq).padStart(3, '0')}`;
+  return `k-${y}-${m}-${d}-`;
+}
+
+/**
+ * Parse daily sequence from `k-YYYY-MM-DD-NNN` or `k-YYYY-MM-DD-NNN-<4hex>`.
+ */
+export function parseKnowledgeIdSeq(
+  id: string,
+  dayPrefix: string,
+): number | null {
+  if (!id.startsWith(dayPrefix)) return null;
+  const rest = id.slice(dayPrefix.length);
+  const m = /^(\d+)(?:-[0-9a-f]{4})?$/i.exec(rest);
+  if (!m?.[1]) return null;
+  const n = Number.parseInt(m[1], 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Generate next knowledge id: k-YYYY-MM-DD-NNN-<4hex>.
+ */
+export function nextKnowledgeId(
+  date: Date,
+  seq: number,
+  authorSuffix?: string,
+): string {
+  const prefix = knowledgeIdDayPrefix(date);
+  const suffix = authorSuffix ?? authorIdSuffix();
+  return `${prefix}${String(seq).padStart(3, '0')}-${suffix}`;
 }

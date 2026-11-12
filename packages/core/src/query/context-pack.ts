@@ -1,6 +1,7 @@
 import {
   ContextPackSchema,
   CONTEXT_PACK_VERSION,
+  KnowledgeAssetIdPattern,
   type ContextPack,
   type KnowledgeAsset,
   type PackAssetBrief,
@@ -30,9 +31,14 @@ export interface BuildContextPackOptions {
   bodyMaxChars?: number;
   /** Max alternative search hits (default 5). */
   alternativeLimit?: number;
+  /**
+   * Optional caller channel for `audit/search-queries/` logs
+   * (e.g. `cli` | `mcp` | `ui`).
+   */
+  source?: string;
 }
 
-const ID_RE = /^k-\d{4}-\d{2}-\d{2}-\d{3}$/;
+const ID_RE = KnowledgeAssetIdPattern;
 
 /**
  * Build a structured Context Pack for Agents (ADR-002).

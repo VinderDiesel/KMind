@@ -1,4 +1,12 @@
 export { createVault, type Vault } from './storage/vault.js';
+export {
+  resolveVaultRoot,
+  findProjectVault,
+  projectVaultPath,
+  PROJECT_VAULT_DIRNAME,
+  type ResolveVaultRootOptions,
+} from './storage/resolve-vault.js';
+
 export { MarkdownStore } from './storage/markdown-store.js';
 export { SqliteStore, type SearchQuery as StoreSearchQuery } from './storage/sqlite-store.js';
 export { BlobStore } from './storage/blob-store.js';
@@ -163,4 +171,13 @@ export {
 export { createLogger } from './observability/logger.js';
 export { DiagnosticCollector } from './observability/diagnostic-collector.js';
 export { AuditLogger } from './observability/audit.js';
+export {
+  appendSearchQueryLog,
+  searchQueryLogPath,
+  SEARCH_QUERY_LOG_DIRNAME,
+  SEARCH_QUERY_LOG_TOP_HITS,
+  type SearchQueryLogEntry,
+  type SearchQueryLogHit,
+  type SearchQueryLogKind,
+} from './observability/search-query-log.js';
 export { traceLifecycle } from './observability/trace.js';

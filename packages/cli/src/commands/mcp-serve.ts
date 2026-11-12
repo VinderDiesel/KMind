@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createVault, startMcpHttpServer, startMcpServer } from '@kmind/mcp-server';
+import { startMcpHttpServer, startMcpServer } from '@kmind/mcp-server';
+import { resolveVaultRoot } from '@kmind/core';
 import { KMindError } from '@kmind/shared';
 import { success } from '../exit.js';
 import { resolveCliEntry } from './adapters.js';
@@ -224,8 +225,7 @@ async function daemonPaths(vaultOpt?: string): Promise<{
   pidFile: string;
   logFile: string;
 }> {
-  const vault = createVault(vaultOpt);
-  const root = vault.root;
+  const root = await resolveVaultRoot({ explicit: vaultOpt });
   return {
     pidFile: path.join(root, 'run', 'mcp-http.pid'),
     logFile: path.join(root, 'logs', 'mcp-http.log'),

@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+# KMind: stage shared vault paths so knowledge rides along with normal commits.
+set -e
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+VAULT="$ROOT/.kmind-knowledge"
+[ -d "$VAULT" ] || exit 0
+
+# Only stage allowlisted shared paths (never raw/ index.db audit/)
+git add -A -- \
+  "$VAULT/knowledge" \
+  "$VAULT/ontology" \
+  "$VAULT/asset-types" \
+  "$VAULT/config.yaml" \
+  "$VAULT/FEATURE_TREE.md" \
+  "$VAULT/.gitignore" \
+  2>/dev/null || true
+
+exit 0

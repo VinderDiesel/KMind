@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { AppContext } from '../context.js';
 import { success, fail } from '../exit.js';
 import { KMindError } from '@kmind/shared';
+import { installProjectAgentContext } from './project-context.js';
 
 /** Terminal → skill directory under user home or project cwd. */
 export const SKILL_TARGETS: Record<
@@ -177,16 +178,27 @@ export async function cmdSkillsInstall(
     }
   }
 
+  let agentContext: Awaited<ReturnType<typeof installProjectAgentContext>> | undefined;
+  if (scope === 'project') {
+    try {
+      agentContext = await installProjectAgentContext(cwd);
+    } catch (err) {
+      fail(err, ctx.json);
+      return;
+    }
+  }
+
   success(
     {
       installed: true,
       scope,
       count: installed.length,
       results: installed,
+      agentContext,
       hint:
         scope === 'global'
           ? 'Restart the AI terminal (or /reload-skills) so skills load.'
-          : 'Commit project skills to share with the team; restart agent session.',
+          : 'Commit project skills + AGENTS.md (KMind section merged if file existed); restart agent session.',
     },
     ctx.json,
   );

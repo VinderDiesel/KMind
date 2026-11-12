@@ -1,5 +1,6 @@
 import {
   createVault,
+  resolveVaultRoot,
   SqliteStore,
   OntologyRegistry,
   OntologyEvolver,
@@ -28,13 +29,19 @@ export interface AppContext {
 
 /**
  * Resolve vault and open sqlite; throws CONFIG_ERROR if missing unless allowMissing.
+ * Vault root: `--vault` → nearest `.kmind-knowledge/` → `~/.kmind`.
  */
 export async function resolveContext(options: {
   vault?: string;
   json?: boolean;
   allowMissing?: boolean;
+  cwd?: string;
 }): Promise<AppContext> {
-  const vault = createVault(options.vault);
+  const root = await resolveVaultRoot({
+    explicit: options.vault,
+    cwd: options.cwd,
+  });
+  const vault = createVault(root);
   const exists = await vault.exists();
   if (!exists && !options.allowMissing) {
     throw new KMindError('Vault not initialized', {

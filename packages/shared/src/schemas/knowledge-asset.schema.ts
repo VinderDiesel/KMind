@@ -55,8 +55,12 @@ export const RelationTypeEnum = z.enum([
 ]);
 export type RelationType = z.infer<typeof RelationTypeEnum>;
 
+/** `k-YYYY-MM-DD-NNN` or multi-writer `k-YYYY-MM-DD-NNN-<4hex>`. */
+export const KnowledgeAssetIdPattern =
+  /^k-\d{4}-\d{2}-\d{2}-\d{3}(?:-[0-9a-f]{4})?$/i;
+
 export const AssetLinkSchema = z.object({
-  id: z.string().regex(/^k-\d{4}-\d{2}-\d{2}-\d{3}$/),
+  id: z.string().regex(KnowledgeAssetIdPattern),
   relation: RelationTypeEnum,
 });
 export type AssetLink = z.infer<typeof AssetLinkSchema>;
@@ -100,7 +104,7 @@ export type DecisionTrajectory = z.infer<typeof DecisionTrajectorySchema>;
 
 export const KnowledgeAssetIdSchema = z
   .string()
-  .regex(/^k-\d{4}-\d{2}-\d{2}-\d{3}$/);
+  .regex(KnowledgeAssetIdPattern);
 
 /** Stable citation into a codebase (pairs with Codegraph; not a full call graph). */
 export const CodeAnchorSchema = z.object({

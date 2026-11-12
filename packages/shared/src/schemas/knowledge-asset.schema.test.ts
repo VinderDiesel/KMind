@@ -16,6 +16,12 @@ describe('KnowledgeAssetSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('given author-suffix id when parse then succeeds', () => {
+    const asset = createKnowledgeAsset({ id: 'k-2026-11-10-007-a3f2' });
+    const result = KnowledgeAssetSchema.safeParse(asset);
+    expect(result.success).toBe(true);
+  });
+
   it('given empty title when parse then fails', () => {
     const asset = createKnowledgeAsset({ title: '' });
     const result = KnowledgeAssetSchema.safeParse(asset);

@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { resolveContext } from './context.js';
 import { fail } from './exit.js';
 import { cmdInit } from './commands/init.js';
+import { cmdFeatureTreeEnsure } from './commands/feature-tree-cmd.js';
 import { cmdCompile } from './commands/compile.js';
 import { cmdSearch } from './commands/search.js';
 import { cmdPack } from './commands/pack.js';
@@ -48,6 +49,35 @@ program
 program
   .command('init')
   .description('Initialize a KMind vault')
+  .option(
+    '--project',
+    'Create .kmind-knowledge/ in the git repo (team share) + FEATURE_TREE + AGENTS + hooks',
+    false,
+  )
+  .action(async (cmdOpts: { project?: boolean }) => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await resolveContext({
+        vault: opts.vault,
+        json: opts.json,
+        allowMissing: true,
+      });
+      await cmdInit(ctx, { project: cmdOpts.project });
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+const featureTreeCmd = program
+  .command('feature-tree')
+  .description('Project FEATURE_TREE.md helpers');
+
+featureTreeCmd
+  .command('ensure')
+  .description(
+    'Ensure vault FEATURE_TREE.md exists (create or refresh guide block)',
+  )
   .action(async () => {
     const opts = program.opts<{ json?: boolean; vault?: string }>();
     try {
@@ -56,7 +86,7 @@ program
         json: opts.json,
         allowMissing: true,
       });
-      await cmdInit(ctx);
+      await cmdFeatureTreeEnsure(ctx);
       ctx.store.close();
     } catch (err) {
       fail(err, opts.json);
@@ -562,7 +592,12 @@ adapters
   .description('Install MCP config + Agent Skills for an adapter')
   .argument('<name>', 'Adapter name')
   .option('--skip-skills', 'Only write MCP config', false)
-  .action(async (name, cmdOpts: { skipSkills?: boolean }) => {
+  .option(
+    '--project',
+    'Pin MCP --vault to repo .kmind-knowledge/ (Cursor: write .cursor/mcp.json)',
+    false,
+  )
+  .action(async (name, cmdOpts: { skipSkills?: boolean; project?: boolean }) => {
     const opts = program.opts<{ json?: boolean; vault?: string }>();
     try {
       const ctx = await resolveContext({
@@ -570,7 +605,10 @@ adapters
         json: opts.json,
         allowMissing: true,
       });
-      await cmdAdaptersInstall(ctx, name, { skipSkills: cmdOpts.skipSkills });
+      await cmdAdaptersInstall(ctx, name, {
+        skipSkills: cmdOpts.skipSkills,
+        project: cmdOpts.project,
+      });
       ctx.store.close();
     } catch (err) {
       fail(err, opts.json);
