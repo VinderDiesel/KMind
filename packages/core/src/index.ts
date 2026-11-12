@@ -80,7 +80,49 @@ export {
   type CoverageReport,
   type CoverageIssue,
   type CoverageOptions,
+  type CoverageIssueCode,
 } from './query/coverage.js';
+export {
+  assessCoverageWithProtocol,
+  attachProtocolToCoverage,
+  type CoverageWithProtocol,
+} from './query/coverage-with-protocol.js';
+export {
+  buildProtocolReceipt,
+  evaluateRecentRecall,
+  RECENT_RECALL_WINDOW_MS,
+  type ProtocolReceipt,
+  type ProtocolViolation,
+  type RecentRecall,
+} from './query/protocol-receipt.js';
+export {
+  inferCodeRootFromVault,
+  anchorFileExists,
+  resolveAnchorPathCandidates,
+} from './query/anchor-fs.js';
+export {
+  listExpiredAssets,
+  retireExpired,
+  deprecateAllExpired,
+  type RetireAction,
+  type RetireExpiredResult,
+  type ExpiredAssetBrief,
+} from './lifecycle/retire-expired.js';
+export {
+  createCliCodegraphClient,
+  symbolNameMatches,
+  filePathMatches,
+} from './codegraph/cli-client.js';
+export type {
+  CodegraphClient,
+  CodegraphCaller,
+  CodegraphSymbolMatch,
+} from './codegraph/types.js';
+export { enrichCoverageSymbols } from './codegraph/enrich-coverage.js';
+export {
+  buildAnchorImpact,
+  findCoCiting,
+} from './codegraph/anchor-impact.js';
 
 export {
   createQueryEngine,

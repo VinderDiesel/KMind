@@ -46,7 +46,7 @@ Never commit: `raw/`, `index.db`, `audit/`, `diagnostics/`. Sync rides normal `g
 - CLI serves them on `127.0.0.1:7821` (override with `--port`) plus read-only `/api/*`.
 - Graph model: **ego neighborhood** (hop shells, default depth 2, node cap 150) **or vault-wide global graph** (node cap 300, prefer linked nodes).
 - Health: vault dashboard (rule chips + issue list) + focus-scoped issues; problem nodes weakly highlighted.
-- Code anchors: Focus panel lists `metadata.codeAnchors`; nodes with anchors get a cool secondary bloom (blast radius stays with Codegraph).
+- Code anchors: Focus panel lists `metadata.codeAnchors`; nodes with anchors get a cool secondary bloom. Blast radius stays with Codegraph — see [ADR-003](adr/003-dual-graph-boundary.md). Coverage may flag `broken_anchor_path` / `expired_asset` (M1); symbol survival + pack `anchorImpact` are M2.
 - No write APIs; capture / compile / export remain CLI or MCP.
 
 ### Read-only API

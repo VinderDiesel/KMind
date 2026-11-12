@@ -8,7 +8,8 @@ import { graphNeighborhoodSearch, graphQuery } from './graph.js';
 import { hybridSearch } from './hybrid.js';
 import type { QueryEngine, SearchQuery, SearchResult } from './types.js';
 import { getProblemStatus } from './problem-status.js';
-import { assessProjectCoverage } from './coverage.js';
+import { inferCodeRootFromVault } from './anchor-fs.js';
+import { assessCoverageWithProtocol } from './coverage-with-protocol.js';
 import { buildContextPack } from './context-pack.js';
 
 /**
@@ -117,16 +118,31 @@ export function createQueryEngine(
       topic?: string;
       hubId?: string;
     }): Promise<unknown> {
-      const assets = await store.queryAssets({
-        project: opts.project,
-        limit: 100_000,
-      });
-      return assessProjectCoverage(assets, opts);
+      return assessCoverageWithProtocol(vault, store, opts);
     },
 
     async pack(opts) {
       const started = Date.now();
-      const pack = await buildContextPack(store, opts);
+      let packOpts = opts;
+      try {
+        const config = await vault.getConfig();
+        packOpts = {
+          ...opts,
+          codeRoot: opts.codeRoot ?? inferCodeRootFromVault(vault.root),
+          codegraphEnabled: opts.codegraphEnabled ?? config.codegraph.enabled,
+          codegraphCommand: opts.codegraphCommand ?? config.codegraph.command,
+          codegraphTimeoutMs:
+            opts.codegraphTimeoutMs ?? config.codegraph.timeoutMs,
+          callersLimit: opts.callersLimit ?? config.codegraph.callersLimit,
+          coCiteLimit: opts.coCiteLimit ?? config.codegraph.coCiteLimit,
+        };
+      } catch {
+        packOpts = {
+          ...opts,
+          codeRoot: opts.codeRoot ?? inferCodeRootFromVault(vault.root),
+        };
+      }
+      const pack = await buildContextPack(store, packOpts);
       const queryEcho = (opts.query ?? opts.id ?? pack.query ?? '').trim();
       const topHits = [
         ...(pack.focus

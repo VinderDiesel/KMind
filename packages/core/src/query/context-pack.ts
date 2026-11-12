@@ -36,6 +36,18 @@ export interface BuildContextPackOptions {
    * (e.g. `cli` | `mcp` | `ui`).
    */
   source?: string;
+  /**
+   * Absolute code root for Codegraph / co-cite (ADR-003).
+   * When set with vault config, pack fills `anchorImpact`.
+   */
+  codeRoot?: string;
+  codegraphEnabled?: boolean;
+  codegraphCommand?: string;
+  codegraphTimeoutMs?: number;
+  callersLimit?: number;
+  coCiteLimit?: number;
+  /** Inject client for tests. */
+  codegraphClient?: import('../codegraph/types.js').CodegraphClient;
 }
 
 const ID_RE = KnowledgeAssetIdPattern;
@@ -64,17 +76,7 @@ export async function buildContextPack(
   if (id && ID_RE.test(id)) {
     focusAsset = await store.getAsset(id);
     if (!focusAsset) {
-      return ContextPackSchema.parse({
-        version: CONTEXT_PACK_VERSION,
-        query: query || undefined,
-        focus: null,
-        alternatives: [],
-        neighborhood: null,
-        codeAnchors: [],
-        problemStatus: null,
-        related: [],
-        hints: [`Asset not found: ${id}`],
-      });
+      return emptyPack(query || undefined, [`Asset not found: ${id}`]);
     }
   } else if (query && ID_RE.test(query)) {
     focusAsset = await store.getAsset(query);
@@ -175,6 +177,14 @@ export async function buildContextPack(
     hints.push('Focus has no code anchors — dig code before relying on this card');
   }
 
+  const anchorImpact = await resolveAnchorImpact(
+    store,
+    focusAsset,
+    codeAnchors,
+    options,
+    hints,
+  );
+
   return ContextPackSchema.parse({
     version: CONTEXT_PACK_VERSION,
     query: queryEcho,
@@ -182,6 +192,7 @@ export async function buildContextPack(
     alternatives,
     neighborhood,
     codeAnchors,
+    anchorImpact,
     problemStatus,
     related,
     hints,
@@ -196,10 +207,66 @@ function emptyPack(query: string | undefined, hints: string[]): ContextPack {
     alternatives: [],
     neighborhood: null,
     codeAnchors: [],
+    anchorImpact: [],
     problemStatus: null,
     related: [],
     hints,
   });
+}
+
+async function resolveAnchorImpact(
+  store: SqliteStore,
+  focusAsset: KnowledgeAsset,
+  codeAnchors: ContextPack['codeAnchors'],
+  options: BuildContextPackOptions,
+  hints: string[],
+): Promise<ContextPack['anchorImpact']> {
+  if (codeAnchors.length === 0 || !options.codeRoot?.trim()) {
+    return [];
+  }
+  if (options.codegraphEnabled === false) {
+    return [];
+  }
+  try {
+    const { buildAnchorImpact } = await import('../codegraph/anchor-impact.js');
+    const { createCliCodegraphClient } = await import(
+      '../codegraph/cli-client.js'
+    );
+    const client =
+      options.codegraphClient ??
+      createCliCodegraphClient({
+        command: options.codegraphCommand,
+        timeoutMs: options.codegraphTimeoutMs,
+      });
+    const projectAssets = await store.queryAssets({
+      project: focusAsset.project,
+      limit: 100_000,
+    });
+    const impact = await buildAnchorImpact({
+      client,
+      projectPath: options.codeRoot,
+      focus: focusAsset,
+      anchors: codeAnchors,
+      projectAssets,
+      enabled: true,
+      callersLimit: options.callersLimit,
+      coCiteLimit: options.coCiteLimit,
+    });
+    if (impact.some((i) => i.codegraphAvailable === false)) {
+      hints.push(
+        'Codegraph unavailable — anchorImpact has co-cites only; run codegraph_explore for callers',
+      );
+    }
+    if (impact.some((i) => i.symbolFound === false)) {
+      hints.push(
+        'Some anchor symbols not found in Codegraph — update ## 代码锚点 after rename',
+      );
+    }
+    return impact;
+  } catch {
+    hints.push('anchorImpact enrichment failed — structure checks skipped');
+    return [];
+  }
 }
 
 function toBrief(asset: KnowledgeAsset, maxChars: number): PackAssetBrief {

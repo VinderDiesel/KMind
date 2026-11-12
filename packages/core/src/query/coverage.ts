@@ -3,6 +3,11 @@ import {
   hasCodeCitation,
   isOverviewTitle,
 } from '../compiler/capture-quality.js';
+import {
+  anchorFileExists,
+  collectAssetAnchors,
+  defaultFileExists,
+} from './anchor-fs.js';
 
 const MIN_CHARS_DETAIL = 350;
 const MIN_CHARS_FEATURE = 550;
@@ -26,6 +31,10 @@ export type CoverageIssueCode =
   | 'duplicate_overview'
   | 'shallow_child'
   | 'missing_anchors'
+  | 'broken_anchor_path'
+  | 'broken_anchor_symbol'
+  | 'expired_asset'
+  | 'codegraph_required_unavailable'
   | 'orphan_detail'
   | 'empty_outbound'
   | 'thin_topic'
@@ -86,6 +95,17 @@ export interface CoverageOptions {
   topic?: string;
   /** Prefer this hub when scoring children. */
   hubId?: string;
+  /**
+   * Repo / code root for anchor fs checks (usually parent of `.kmind-knowledge`).
+   * When omitted together with `exists`, broken_anchor_path checks are skipped.
+   */
+  codeRoot?: string;
+  /** Working directory fallback for anchor paths (default process.cwd()). */
+  cwd?: string;
+  /** Injectable fs probe; default existsSync. */
+  exists?: (absPath: string) => boolean;
+  /** Clock for expiresAt (tests). */
+  now?: Date;
 }
 
 /**
@@ -108,6 +128,10 @@ export function assessProjectCoverage(
   const issues: CoverageIssue[] = [];
   const hubs = scoped.filter((a) => isOverviewTitle(a.title));
   const details = scoped.filter((a) => !isOverviewTitle(a.title));
+  const checkFs =
+    Boolean(options.codeRoot?.trim()) || typeof options.exists === 'function';
+  const existsFn = options.exists ?? defaultFileExists;
+  const nowMs = (options.now ?? new Date()).getTime();
 
   const duplicateOverviews = findDuplicateOverviews(
     topic ? hubs : inProject.filter((a) => isOverviewTitle(a.title)),
@@ -279,12 +303,59 @@ export function assessProjectCoverage(
     });
   }
 
+  const brokenAnchors: CoverageCardBrief[] = [];
+  const expired: CoverageCardBrief[] = [];
+  for (const a of scoped) {
+    if (a.expiresAt) {
+      const exp = Date.parse(a.expiresAt);
+      if (Number.isFinite(exp) && exp < nowMs) {
+        expired.push(brief(a));
+        issues.push({
+          code: 'expired_asset',
+          severity: 'medium',
+          assetId: a.id,
+          message: `知识卡已过期（expiresAt=${a.expiresAt}）：${a.title} — 更新或 supersede 后再宣称完整`,
+        });
+      }
+    }
+
+    if (!checkFs) continue;
+    const anchors = collectAssetAnchors(a);
+    if (anchors.length === 0) continue;
+    const missingFiles: string[] = [];
+    for (const anchor of anchors) {
+      const ok = anchorFileExists(anchor.file, {
+        projectPath: anchor.projectPath,
+        codeRoot: options.codeRoot,
+        cwd: options.cwd,
+        exists: existsFn,
+      });
+      if (!ok) missingFiles.push(anchor.file);
+    }
+    if (missingFiles.length > 0) {
+      brokenAnchors.push(brief(a));
+      issues.push({
+        code: 'broken_anchor_path',
+        severity: 'medium',
+        assetId: a.id,
+        message: `代码锚点文件不存在：${a.title} — ${missingFiles.slice(0, 5).join(', ')}${missingFiles.length > 5 ? '…' : ''}（更新锚点或恢复文件）`,
+      });
+    }
+  }
+
   const blocking = issues.filter(
     (i) => i.severity === 'high' || i.severity === 'medium',
   );
   const complete = blocking.length === 0 && scoped.length > 0;
 
-  const nextActions = buildNextActions(issues, hubs, shallow, missingAnchors);
+  const nextActions = buildNextActions(
+    issues,
+    hubs,
+    shallow,
+    missingAnchors,
+    brokenAnchors,
+    expired,
+  );
   const summary = complete
     ? `覆盖合格：project=${project}${topic ? ` topic=${topic}` : ''}，${hubs.length} 总览 / ${details.length} 明细，无高/中问题`
     : `覆盖未完成：${blocking.length} 个高/中问题（共 ${issues.length}）。禁止对外宣称「知识已完整」——请按 nextActions 深挖，勿只刷新总览。`;
@@ -451,6 +522,8 @@ function buildNextActions(
   hubs: KnowledgeAsset[],
   shallow: CoverageCardBrief[],
   missingAnchors: CoverageCardBrief[],
+  brokenAnchors: CoverageCardBrief[],
+  expired: CoverageCardBrief[],
 ): string[] {
   const actions: string[] = [];
   if (issues.some((i) => i.code === 'no_hub')) {
@@ -473,6 +546,22 @@ function buildNextActions(
         .slice(0, 5)
         .map((s) => s.id)
         .join(', ')}`,
+    );
+  }
+  if (brokenAnchors.length > 0) {
+    actions.push(
+      `修复断锚点（文件不存在）：${brokenAnchors
+        .slice(0, 5)
+        .map((s) => s.id)
+        .join(', ')} — 更新 ## 代码锚点 或恢复文件`,
+    );
+  }
+  if (expired.length > 0) {
+    actions.push(
+      `过期卡淘汰闭环：${expired
+        .slice(0, 5)
+        .map((s) => s.id)
+        .join(', ')} — kmind expiry deprecate --id <id> | supersede --id <旧> --by <新> | refresh --id <id>；批量：kmind expiry deprecate-all --project <p>`,
     );
   }
   if (issues.some((i) => i.code === 'hub_no_children')) {

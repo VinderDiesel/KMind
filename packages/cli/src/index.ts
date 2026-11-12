@@ -19,6 +19,7 @@ import { cmdHook } from './commands/hook.js';
 import { cmdReindex } from './commands/reindex.js';
 import { cmdUi } from './commands/ui.js';
 import { cmdPurgeSessions } from './commands/purge-sessions.js';
+import { cmdExpiry } from './commands/expiry.js';
 import { cmdCoverage } from './commands/coverage.js';
 import {
   cmdScheduleList,
@@ -233,6 +234,38 @@ program
     try {
       const ctx = await withVaultOrPrompt(opts);
       await cmdPurgeSessions(ctx, { dryRun: Boolean(cmdOpts.dryRun) });
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+program
+  .command('expiry')
+  .description(
+    'Retire expired knowledge cards: list | deprecate | supersede | refresh | deprecate-all',
+  )
+  .argument(
+    '<action>',
+    'list | deprecate | supersede | refresh | deprecate-all',
+  )
+  .option('--id <assetId>', 'Target expired asset id')
+  .option('--by <assetId>', 'Replacement asset id (supersede)')
+  .option('--project <name>', 'Project scope (list / deprecate-all)')
+  .option('--expires-at <iso>', 'New expiresAt for refresh (omit to clear)')
+  .option('--dry-run', 'Report without writing', false)
+  .action(async (action, cmdOpts) => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await withVaultOrPrompt(opts);
+      await cmdExpiry(ctx, {
+        action: String(action),
+        id: cmdOpts.id,
+        by: cmdOpts.by,
+        project: cmdOpts.project,
+        expiresAt: cmdOpts.expiresAt,
+        dryRun: Boolean(cmdOpts.dryRun),
+      });
       ctx.store.close();
     } catch (err) {
       fail(err, opts.json);

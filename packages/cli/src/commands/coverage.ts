@@ -1,4 +1,4 @@
-import { assessProjectCoverage } from '@kmind/core';
+import { assessCoverageWithProtocol } from '@kmind/core';
 import type { AppContext } from '../context.js';
 import { fail, success } from '../exit.js';
 import { KMindError } from '@kmind/shared';
@@ -22,8 +22,7 @@ export async function cmdCoverage(
       ctx.json,
     );
   }
-  const assets = await ctx.store.queryAssets({ project, limit: 100_000 });
-  const report = assessProjectCoverage(assets, {
+  const report = await assessCoverageWithProtocol(ctx.vault, ctx.store, {
     project,
     topic: options.topic,
     hubId: options.hubId,
@@ -33,6 +32,15 @@ export async function cmdCoverage(
     return;
   }
   process.stdout.write(`${report.summary}\n`);
+  process.stdout.write(
+    `claimCompleteAllowed=${report.claimCompleteAllowed} recentRecall=${report.recentRecall.status}\n`,
+  );
+  if (report.protocolViolation.length) {
+    process.stdout.write('\nProtocol violations:\n');
+    for (const v of report.protocolViolation) {
+      process.stdout.write(`- [${v.severity}] ${v.code}: ${v.message}\n`);
+    }
+  }
   if (report.nextActions.length) {
     process.stdout.write('\nNext actions:\n');
     for (const a of report.nextActions) {

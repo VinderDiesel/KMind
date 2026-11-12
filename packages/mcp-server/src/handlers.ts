@@ -17,10 +17,15 @@ import {
   assessCaptureQuality,
   assessProjectCoverage,
   assessOverviewChildrenDepth,
+  attachProtocolToCoverage,
   buildCaptureSuggestions,
+  inferCodeRootFromVault,
   loadEvolutionQueue,
   runEvolutionScan,
   isOverviewTitle,
+  MarkdownStore,
+  retireExpired,
+  deprecateAllExpired,
   type AssetTypeRegistry,
   type ExportFilter,
   type ImportConflictPolicy,
@@ -179,6 +184,46 @@ async function dispatch(
     }
     case 'kmind_problem_status': {
       return ctx.engine.problemStatus(String(args.id ?? ''));
+    }
+    case 'kmind_retire_expired': {
+      const action = String(args.action ?? '').trim();
+      const assets = await ctx.store.queryAssets({ limit: 100_000 });
+      const markdown = new MarkdownStore(ctx.vault.knowledgeDir);
+      const dryRun = Boolean(args.dryRun);
+      const project =
+        typeof args.project === 'string' && args.project.trim()
+          ? args.project.trim()
+          : undefined;
+      const id =
+        typeof args.id === 'string' && args.id.trim()
+          ? args.id.trim()
+          : undefined;
+      const by =
+        typeof args.by === 'string' && args.by.trim()
+          ? args.by.trim()
+          : undefined;
+      const expiresAt =
+        typeof args.expiresAt === 'string' ? args.expiresAt : undefined;
+      if (action === 'deprecate-all') {
+        return deprecateAllExpired({
+          store: ctx.store,
+          markdown,
+          assets,
+          project: project ?? '',
+          dryRun,
+        });
+      }
+      return retireExpired({
+        store: ctx.store,
+        markdown,
+        assets,
+        action: action as 'list' | 'deprecate' | 'supersede' | 'refresh',
+        id,
+        by,
+        project,
+        expiresAt,
+        dryRun,
+      });
     }
     case 'kmind_coverage': {
       const project = String(args.project ?? '').trim();
@@ -512,10 +557,16 @@ async function dispatch(
         limit: 100_000,
       });
       const topicGuess = guessTopicFromTitle(title);
-      const coverage = assessProjectCoverage(afterAssets, {
+      const coverageBase = assessProjectCoverage(afterAssets, {
         project,
+        codeRoot: inferCodeRootFromVault(ctx.vault.root),
         ...(topicGuess ? { topic: topicGuess } : {}),
       });
+      const coverage = await attachProtocolToCoverage(
+        ctx.vault,
+        ctx.store,
+        coverageBase,
+      );
       return {
         captured: true,
         relativePath,
@@ -531,7 +582,9 @@ async function dispatch(
           shallow: coverage.shallow.slice(0, 10),
           duplicateOverviews: coverage.duplicateOverviews,
         },
-        claimCompleteAllowed: coverage.complete,
+        claimCompleteAllowed: coverage.claimCompleteAllowed,
+        protocolViolation: coverage.protocolViolation,
+        recentRecall: coverage.recentRecall,
         ...(quality.hints.length ? { hints: quality.hints } : {}),
         ...(coverage.complete
           ? {}

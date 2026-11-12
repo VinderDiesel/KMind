@@ -3,8 +3,10 @@ import {
   assessCaptureQuality,
   assessOverviewChildrenDepth,
   assessProjectCoverage,
+  attachProtocolToCoverage,
   BlobStore,
   createPipeline,
+  inferCodeRootFromVault,
   isOverviewTitle,
   sanitizeTitle,
 } from '@kmind/core';
@@ -141,7 +143,15 @@ export async function cmdCapture(
     incremental: true,
   });
   const afterAssets = await ctx.store.queryAssets({ project, limit: 100_000 });
-  const coverage = assessProjectCoverage(afterAssets, { project });
+  const coverageBase = assessProjectCoverage(afterAssets, {
+    project,
+    codeRoot: inferCodeRootFromVault(ctx.vault.root),
+  });
+  const coverage = await attachProtocolToCoverage(
+    ctx.vault,
+    ctx.store,
+    coverageBase,
+  );
   success(
     {
       relativePath,
@@ -157,7 +167,9 @@ export async function cmdCapture(
         nextActions: coverage.nextActions,
         issueCount: coverage.issues.length,
       },
-      claimCompleteAllowed: coverage.complete,
+      claimCompleteAllowed: coverage.claimCompleteAllowed,
+      protocolViolation: coverage.protocolViolation,
+      recentRecall: coverage.recentRecall,
     },
     ctx.json,
   );

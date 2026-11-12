@@ -10,7 +10,7 @@ description: >-
 
 # KMind ↔ Codegraph 桥接
 
-两套本地图，**不要混用**：
+两套本地图，**不要混用**（ADR-003：知识真相在 KMind，结构/影响面在 Codegraph；coverage 校验文件+符号存活；`kmind_pack.anchorImpact` 含 callers 摘要与同锚点知识逆查，**不**持久化进资产）：
 
 | 问法 | 用 | 工具 |
 |:---|:---|:---|

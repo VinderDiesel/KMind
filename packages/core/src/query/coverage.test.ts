@@ -224,6 +224,126 @@ JOIN 路径丢失后静默返回空集，未走澄清槽位。
       true,
     );
   });
+
+  it('given expired asset in scope when assess then expired_asset medium incomplete', () => {
+    const c1 = asset({
+      title: '问数 Router 分流',
+      body: DEEP_BODY,
+      related: [],
+    });
+    Object.assign(c1, { expiresAt: '2020-01-01T00:00:00.000Z' });
+    const c2 = asset({
+      title: '问数 AskTrace',
+      body: DEEP_BODY.replace(/routeAsk/g, 'writeTrace').replace(
+        /router\.ts/g,
+        'trace.ts',
+      ),
+      related: [],
+    });
+    const c3 = asset({
+      title: '问数 澄清槽',
+      body: DEEP_BODY.replace(/routeAsk/g, 'clarify').replace(
+        /router\.ts/g,
+        'clarify.ts',
+      ),
+      related: [],
+    });
+    const hub = asset({
+      title: '问数系统知识总览',
+      body: '## 红线规避\n- 禁止空总览\n\n导航',
+      related: [c1.id, c2.id, c3.id],
+    });
+    const report = assessProjectCoverage([hub, c1, c2, c3], {
+      project: 'meta-brain',
+      topic: '问数',
+      now: new Date('2026-11-12T00:00:00.000Z'),
+    });
+    expect(report.complete).toBe(false);
+    expect(
+      report.issues.some(
+        (i) => i.code === 'expired_asset' && i.severity === 'medium',
+      ),
+    ).toBe(true);
+  });
+
+  it('given broken anchor path when exists injected then broken_anchor_path', () => {
+    const child = asset({
+      title: '问数 Router 分流',
+      body: DEEP_BODY,
+      related: [],
+    });
+    const hub = asset({
+      title: '问数系统知识总览',
+      body: '## 红线规避\n- 禁止空总览\n\n导航',
+      related: [child.id],
+    });
+    const sibling = asset({
+      title: '问数 AskTrace',
+      body: DEEP_BODY.replace(/routeAsk/g, 'writeTrace').replace(
+        /router\.ts/g,
+        'trace.ts',
+      ),
+      related: [],
+    });
+    const sibling2 = asset({
+      title: '问数 澄清槽',
+      body: DEEP_BODY.replace(/routeAsk/g, 'clarify').replace(
+        /router\.ts/g,
+        'clarify.ts',
+      ),
+      related: [],
+    });
+    hub.related = [child.id, sibling.id, sibling2.id];
+    const report = assessProjectCoverage([hub, child, sibling, sibling2], {
+      project: 'meta-brain',
+      topic: '问数',
+      codeRoot: '/tmp/fake-root',
+      exists: () => false,
+    });
+    expect(report.complete).toBe(false);
+    expect(
+      report.issues.some(
+        (i) => i.code === 'broken_anchor_path' && i.severity === 'medium',
+      ),
+    ).toBe(true);
+    expect(report.issues.filter((i) => i.code === 'broken_anchor_path').length).toBeGreaterThanOrEqual(
+      1,
+    );
+  });
+
+  it('given codeRoot omitted when assess then skips broken_anchor_path', () => {
+    const c1 = asset({
+      title: '问数 Router 分流',
+      body: DEEP_BODY,
+      related: [],
+    });
+    const c2 = asset({
+      title: '问数 AskTrace',
+      body: DEEP_BODY.replace(/routeAsk/g, 'writeTrace').replace(
+        /router\.ts/g,
+        'trace.ts',
+      ),
+      related: [],
+    });
+    const c3 = asset({
+      title: '问数 澄清槽',
+      body: DEEP_BODY.replace(/routeAsk/g, 'clarify').replace(
+        /router\.ts/g,
+        'clarify.ts',
+      ),
+      related: [],
+    });
+    const hub = asset({
+      title: '问数系统知识总览',
+      body: '## 红线规避\n- 禁止空总览\n\n导航',
+      related: [c1.id, c2.id, c3.id],
+    });
+    const report = assessProjectCoverage([hub, c1, c2, c3], {
+      project: 'meta-brain',
+      topic: '问数',
+    });
+    expect(report.issues.map((i) => i.code)).not.toContain('broken_anchor_path');
+  });
 });
 
 describe('assessOverviewChildrenDepth', () => {

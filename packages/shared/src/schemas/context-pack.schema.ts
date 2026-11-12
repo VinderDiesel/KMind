@@ -63,6 +63,35 @@ export const PackProblemStatusSchema = z.object({
 });
 export type PackProblemStatus = z.infer<typeof PackProblemStatusSchema>;
 
+/** ADR-003: live structure + co-citing knowledge (not persisted on the asset). */
+export const PackAnchorImpactSchema = z.object({
+  file: z.string(),
+  symbol: z.string().optional(),
+  symbolFound: z.boolean().optional(),
+  codegraphAvailable: z.boolean(),
+  callers: z
+    .array(
+      z.object({
+        name: z.string(),
+        filePath: z.string(),
+        kind: z.string().optional(),
+        startLine: z.number().int().positive().optional(),
+      }),
+    )
+    .default([]),
+  /** Same-project knowledge cards citing the same file|symbol (capped). */
+  coCiting: z
+    .array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        type: KnowledgeTypeIdSchema,
+      }),
+    )
+    .default([]),
+});
+export type PackAnchorImpact = z.infer<typeof PackAnchorImpactSchema>;
+
 /**
  * Structured recall pack for Agents (ADR-002).
  * Versioned contract — bump `version` when breaking fields change.
@@ -86,6 +115,10 @@ export const ContextPackSchema = z.object({
     .nullable(),
   /** Code anchors on the focus card. */
   codeAnchors: z.array(CodeAnchorSchema).default([]),
+  /**
+   * ADR-003: callers (Codegraph) + co-citing cards — ephemeral, not vault truth.
+   */
+  anchorImpact: z.array(PackAnchorImpactSchema).default([]),
   /** Present when focus.type === problem (or requested id is a problem). */
   problemStatus: PackProblemStatusSchema.nullable().default(null),
   /** Soft related assets (brief), depth 1. */

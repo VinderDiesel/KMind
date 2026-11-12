@@ -76,9 +76,15 @@ description: >-
 kmind_coverage  project=<project>  topic=<主题>
 ```
 
-- 仅当 `complete === true` 才可回复「已整理完毕」  
+- 仅当 `complete === true`（且 `claimCompleteAllowed === true`）才可回复「已整理完毕」  
 - `complete === false` → 展示 `summary` + `nextActions`，继续深挖，**禁止**只重挂总览结束  
+- **否决 complete 的新增条件**：评估集内锚点文件不存在（`broken_anchor_path`）、符号在 Codegraph 未命中（`broken_anchor_symbol`）、已过 `expiresAt`（`expired_asset`）；`codegraph.required=true` 且不可用时还有 `codegraph_required_unavailable`  
 - 出现 `type_mono` → 从会话/失败路径/配置拆至少 1 张非架构卡；无证据则如实说明未 complete，**禁止编造 pitfall**  
+- capture / coverage 回执还含 `protocolViolation` 与 `recentRecall`：  
+  - `session_pollution` → 催 `kmind purge-sessions`，**不**否决 complete  
+  - `recentRecall.status=miss`（24h 内无 pack/search）→ 警告，先 `kmind_pack`；**不**否决 complete  
+  - `recentRecall.status=unknown` → 审计不可读；**不**否决 complete  
+  - `codegraph_unavailable` → 跳过符号校验；**不**否决 complete（除非 config `codegraph.required`）  
 - capture 成功回执里的 `claimCompleteAllowed` / `coverage.complete` 同理  
 
 **反例（禁止）：** 搜到「××知识总览」→ 宣称库里已完整 → 只把总览挂进主索引 → 交付三级目录树；或四张以上全是 `architecture_design` 就宣称整理完。
@@ -189,13 +195,15 @@ kmind_coverage  project=<project>  topic=<主题>
 ```
 
 `quality_gate` → 按 `reasons` 补锚点/挂图/拆卡/深挖浅卡后重写，**不要**改成更短的总结。  
-`coverage.complete=false`（含 `type_mono`）→ **禁止**宣称完整。
+`coverage.complete=false`（含 `type_mono` / `broken_anchor_path` / `expired_asset`）→ **禁止**宣称完整。
 
 ## 质量边界（系统）
 
 - 明细 + 一卡一事 + 架构锚点 + 增量必须挂图  
 - 总览 related 子卡过半/全浅 → 拒写  
 - 明细≥4 且几乎全是 architecture、零非架构 → `type_mono`（阻塞 complete）  
-- Session 双闸门：`compileSessions` + `KMIND_COMPILE_SESSIONS=1`  
-- lint：`coverage_*`（浅卡 / 重复总览 / 空总览）  
+- 锚点文件不存在 → `broken_anchor_path`；`expiresAt` 已过 → `expired_asset`（均阻塞 complete）  
+- 过期卡闭环：`kmind expiry deprecate|supersede|refresh` 或 MCP `kmind_retire_expired`（先 `dryRun`）；deprecate 后不再计入 coverage  
+- Session 双闸门：`compileSessions` + `KMIND_COMPILE_SESSIONS=1`；脏 session 走 `protocolViolation`，不阻塞 complete  
+- lint：`coverage_*`（浅卡 / 重复总览 / 空总览 / 断锚点 / 过期）  
 - 与 **kmind-code-bridge** 配合取符号，禁止整文件入库  

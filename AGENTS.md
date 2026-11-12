@@ -30,7 +30,7 @@ Skills（`kmind-capture` / `kmind-code-bridge`）是细则；本文是**默认�
 2. **查结构** — 需要符号 / 调用链 / 影响面时用 Codegraph（`codegraph_explore` + `projectPath`）；无索引再用 Read/Grep。
 3. **实现** — 遵守下文编码铁律；复用库内已有结论与锚点，不另起一套平行方案 unless 显式 supersede。
 4. **沉淀** — 决策闭合、可复用实践、踩坑、架构取舍 → 走 `kmind_capture_suggest` → 人确认（或会话内等价确认）→ `kmind_capture`。用户不必说「记一下」。
-5. **验收知识完整性** — 整理某系统时必须 `kmind_coverage`；仅 `complete=true` 可宣称整理完毕。
+5. **验收知识完整性** — 整理某系统时必须 `kmind_coverage`；仅 `complete=true` / `claimCompleteAllowed=true` 可宣称整理完毕。断锚点文件（`broken_anchor_path`）与过期卡（`expired_asset`）否决 complete。`protocolViolation`（如 session 污染、24h 无 pack/search）须处理或明示，但不单独否决 complete。
 
 禁止：
 
@@ -38,6 +38,7 @@ Skills（`kmind-capture` / `kmind-code-bridge`）是细则；本文是**默认�
 - 默认 `type=architecture_design`
 - Session / 聊天全文自动升知识（只走 `kmind_capture`）
 - 缺 `project` 或 `project=global` 的 capture
+- 忽略 coverage 回执里的 `broken_anchor_path` / `expired_asset` 仍宣称完整
 
 ---
 

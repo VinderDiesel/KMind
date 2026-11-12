@@ -93,5 +93,28 @@ export const KMindConfigSchema = z.object({
       enabled: z.boolean().default(false),
     })
     .default({}),
+  /**
+   * ADR-003: Codegraph CLI adapter (symbol survival + pack callers).
+   * Does not read `.codegraph/` SQLite from core.
+   */
+  codegraph: z
+    .object({
+      /** When false, skip symbol enrichment and pack callers. */
+      enabled: z.boolean().default(true),
+      /**
+       * When true and Codegraph unavailable, coverage gets
+       * `codegraph_required_unavailable` (vetoes complete for projects
+       * that have symbol anchors). Default: warn only.
+       */
+      required: z.boolean().default(false),
+      /** Executable name or absolute path. */
+      command: z.string().default('codegraph'),
+      timeoutMs: z.number().int().min(500).max(120_000).default(15_000),
+      /** Max callers listed per anchor in pack.anchorImpact. */
+      callersLimit: z.number().int().min(1).max(40).default(8),
+      /** Max co-citing knowledge cards per anchor. */
+      coCiteLimit: z.number().int().min(1).max(20).default(5),
+    })
+    .default({}),
 });
 export type KMindConfig = z.infer<typeof KMindConfigSchema>;

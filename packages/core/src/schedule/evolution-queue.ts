@@ -10,6 +10,7 @@ import {
 import type { Vault } from '../storage/vault.js';
 import type { SqliteStore } from '../storage/sqlite-store.js';
 import { runHealthCheck } from '../health/checker.js';
+import { inferCodeRootFromVault } from '../query/anchor-fs.js';
 import { assessProjectCoverage } from '../query/coverage.js';
 
 /**
@@ -115,8 +116,9 @@ export async function runEvolutionScan(
     ),
   ].sort();
 
+  const codeRoot = inferCodeRootFromVault(vault.root);
   for (const project of projects) {
-    const report = assessProjectCoverage(assets, { project });
+    const report = assessProjectCoverage(assets, { project, codeRoot });
     for (const issue of report.issues) {
       const id = todoId(
         'coverage',

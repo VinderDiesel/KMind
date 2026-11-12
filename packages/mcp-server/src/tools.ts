@@ -56,7 +56,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   {
     name: 'kmind_pack',
     description:
-      'ADR-002 Context Pack: structured recall for Agents (focus card + ego neighborhood + code anchors + problem status). Prefer this over raw search when answering from the vault — returns cards, not LLM-synthesized answers. Pass id (k-…) or query.',
+      'ADR-002 Context Pack: structured recall for Agents (focus card + ego neighborhood + code anchors + ADR-003 anchorImpact callers/co-cites + problem status). Prefer this over raw search when answering from the vault — returns cards, not LLM-synthesized answers. Pass id (k-…) or query.',
     effect: 'read',
     inputSchema: {
       type: 'object',
@@ -144,7 +144,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   {
     name: 'kmind_coverage',
     description:
-      'Assess whether a project/topic is dug deep vs catalog-only. Returns complete=false when hubs are empty, children shallow, duplicate overviews, missing anchors, or type_mono (almost all architecture_design details). REQUIRED before claiming「知识已完整」after 整理某系统; never treat search hits alone as complete.',
+      'Assess whether a project/topic is dug deep vs catalog-only. complete=false on shallow hubs/children, duplicate overviews, missing anchors, type_mono, broken_anchor_path, broken_anchor_symbol, or expired_asset. Also returns protocolViolation + recentRecall. For expired_asset use kmind_retire_expired. REQUIRED before claiming「知识已完整」; search hits alone ≠ complete.',
     effect: 'read',
     inputSchema: {
       type: 'object',
@@ -163,6 +163,33 @@ export const MCP_TOOLS: McpToolDef[] = [
         },
       },
       required: ['project'],
+    },
+  },
+  {
+    name: 'kmind_retire_expired',
+    description:
+      'Retire expired knowledge cards (write). action=list|deprecate|supersede|refresh|deprecate-all. deprecate drops card from coverage; supersede requires by=<newId>; refresh clears or sets expiresAt. Prefer dryRun=true first. Closes expired_asset coverage gaps.',
+    effect: 'write',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          description: 'list | deprecate | supersede | refresh | deprecate-all',
+        },
+        id: { type: 'string', description: 'Target asset id' },
+        by: { type: 'string', description: 'Replacement id when supersede' },
+        project: {
+          type: 'string',
+          description: 'Project scope for list / deprecate-all',
+        },
+        expiresAt: {
+          type: 'string',
+          description: 'ISO datetime for refresh; omit to clear expiry',
+        },
+        dryRun: { type: 'boolean', default: false },
+      },
+      required: ['action'],
     },
   },
   {
@@ -235,7 +262,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   {
     name: 'kmind_capture',
     description:
-      'Capture knowledge (write). Depth is DEFAULT — do not wait for user to ask for detail. Prefer kmind_capture_suggest first; merge accepted apply fields here. One topic per card with 实现方式+注意事项+红线 and code anchors for architecture/process. Incremental (project already has assets): MUST related/links to hub/neighbors. Overview: thin + related[] to non-shallow children. Success returns coverage — do not claim complete unless coverage.complete=true.',
+      'Capture knowledge (write). Depth is DEFAULT — do not wait for user to ask for detail. Prefer kmind_capture_suggest first; merge accepted apply fields here. One topic per card with 实现方式+注意事项+红线 and code anchors for architecture/process. Incremental (project already has assets): MUST related/links to hub/neighbors. Overview: thin + related[] to non-shallow children. Success returns coverage + claimCompleteAllowed + protocolViolation + recentRecall — do not claim complete unless claimCompleteAllowed/coverage.complete=true (broken_anchor_path/expired_asset block; session_pollution/no_recent_recall warn only).',
     effect: 'write',
     inputSchema: {
       type: 'object',

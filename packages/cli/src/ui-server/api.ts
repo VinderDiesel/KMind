@@ -4,7 +4,7 @@ import {
   buildEgoGraph,
   buildGlobalGraph,
   filterEgoHealthIssues,
-  assessProjectCoverage,
+  assessCoverageWithProtocol,
   EGO_DEFAULT_DEPTH,
   EGO_DEFAULT_NODE_CAP,
   GLOBAL_DEFAULT_NODE_CAP,
@@ -157,12 +157,16 @@ export async function handleUiApi(
     }
     const topic = searchParams.get('topic')?.trim() || undefined;
     const hubId = searchParams.get('hubId')?.trim() || undefined;
-    const assets = await ctx.store.queryAssets({ project, limit: 100_000 });
-    const report = assessProjectCoverage(assets, { project, topic, hubId });
+    const report = await assessCoverageWithProtocol(ctx.vault, ctx.store, {
+      project,
+      topic,
+      hubId,
+    });
     return {
       status: 200,
       body: {
         complete: report.complete,
+        claimCompleteAllowed: report.claimCompleteAllowed,
         summary: report.summary,
         nextActions: report.nextActions.slice(0, 8),
         issueCount: report.issues.length,
@@ -171,6 +175,9 @@ export async function handleUiApi(
         duplicateOverviews: report.duplicateOverviews,
         topic: report.topic,
         project: report.project,
+        protocolViolation: report.protocolViolation,
+        recentRecall: report.recentRecall,
+        issues: report.issues.slice(0, 20),
       },
     };
   }

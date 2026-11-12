@@ -14,7 +14,7 @@
 3. **查代码结构** — 有 Codegraph 用 `codegraph_explore`（传 `projectPath`）；否则 Read/Grep。
 4. **实现** — 优先复用库内已有结论；要推翻旧结论须新卡并 `supersedes` 旧 id。
 5. **沉淀** — 决策闭合、踩坑、可复用实践 → `kmind_asset_types` → `kmind_capture_suggest` → `kmind_capture`。用户不必说「记一下」。
-6. **整理某系统** — 必须 `kmind_coverage` + 功能树无关键 `todo`；仅 `complete=true` 且题单可答才可宣称完成。
+6. **整理某系统** — 必须 `kmind_coverage` + 功能树无关键 `todo`；仅 `complete=true`（`claimCompleteAllowed`）且题单可答才可宣称完成。断锚点/过期卡否决 complete；`protocolViolation`（session 污染、24h 无召回）须处理或明示，不单独否决 complete。
 
 ### Vault
 
