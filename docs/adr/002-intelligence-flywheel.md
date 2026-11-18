@@ -3,7 +3,7 @@
 - **状态**：Accepted
 - **日期**：2026-10-30
 - **决策者**：grill-me 会话共识
-- **关联**：[ADR-001 资产类型 Registry](001-asset-type-registry.md)
+- **关联**：[ADR-001 资产类型 Registry](001-asset-type-registry.md)、[ADR-004 知识初始化混合架构](004-knowledge-bootstrap-hybrid.md)
 
 ## 背景
 

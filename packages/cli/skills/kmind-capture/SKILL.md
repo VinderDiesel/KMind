@@ -65,10 +65,12 @@ description: >-
 
 触发词：整理到 kmind、把××系统写入、沉淀××架构、知识库化……
 
-1. **盘点**：模块 / 阶段 / 可观测 / 配置 / 迁移 / 已知坑 — **每项标注候选 type**（可暂不 capture）  
-2. **深挖**：每项 `codegraph_explore` 或 Read 关键文件 → 路径·符号·失败模式  
-3. **入库**：按候选 type 写专项明细；有证据才写 pitfall/tool_usage/problem；**禁止编造**；每张卡前先 `kmind_asset_types` + `kmind_capture_suggest`，回灌 `apply.type`  
-4. **成图**：薄总览 + `related`→全部**已深挖**子卡；子卡可 `part_of`→总览  
+对齐 **ADR-004**（确定性工程 × Agent）：系统先出盘点清单，Agent 再按组深挖；**禁止**跳过 bootstrap 直接写总览。
+
+1. **盘点（bootstrap）**：先 `kmind_bootstrap_preview`（或 `kmind bootstrap preview --project <p>`）拿 `BootstrapPlan`。可选 `apply-tree` / `sync-tree`。**bootstrap ≠ complete**。  
+2. **深挖（delegate）**：无 group 时看 `recommendedNext`；对每组调用 `kmind_bootstrap_delegate`（或 `kmind bootstrap delegate --group <label>`）拿 DigPacket；按 packet.tasks 用 `codegraph_explore` / Read 深挖；`done` 可跳过。遵循 packet.acceptance（禁止提前宣称 complete）。  
+3. **入库**：`kmind_asset_types` + `kmind_capture_suggest` → 确认 → `kmind_capture` **回灌 `bootstrapTask=<DigTask id>`**（成功回执含 `bootstrapMarked`）或事后 `kmind_bootstrap_mark`；有证据才写 pitfall/tool/problem；**禁止**自动灌正文。  
+4. **成图 + 验收**：薄总览 related 子卡；组末 / 主题末 `kmind_coverage`。`kmind_evolution_queue` 的 bootstrap 项含 `digTaskId` / `groupLabel`，按 `nextAction` 跳转。  
 
 **收工验收（硬）：**
 

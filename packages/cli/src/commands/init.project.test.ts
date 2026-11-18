@@ -59,6 +59,10 @@ describe('cmdInit --project', () => {
     expect(existsSync(path.join(vaultPath, 'config.yaml'))).toBe(true);
     expect(existsSync(path.join(vaultPath, '.gitignore'))).toBe(true);
     expect(existsSync(path.join(vaultPath, 'FEATURE_TREE.md'))).toBe(true);
+    expect(existsSync(path.join(vaultPath, 'bootstrap-rules.yaml'))).toBe(true);
+    expect(
+      readFileSync(path.join(vaultPath, 'bootstrap-rules.yaml'), 'utf8'),
+    ).toContain('pathGlob');
     expect(readFileSync(path.join(vaultPath, 'FEATURE_TREE.md'), 'utf8')).toContain(
       'kmind:feature-tree-guide',
     );
@@ -69,6 +73,41 @@ describe('cmdInit --project', () => {
     expect(existsSync(path.join(dir, '.githooks', 'pre-commit'))).toBe(true);
     const out = Buffer.concat(chunks).toString('utf8');
     expect(out).toContain('"ok":true');
+  });
+
+  it('given existing bootstrap-rules.yaml when re-init then does not overwrite', async () => {
+    const homeVault = createVault(path.join(dir, 'home-vault'));
+    await homeVault.init();
+    const { SqliteStore } = await import('@kmind/core');
+    const store = new SqliteStore(homeVault.indexPath);
+    await store.migrate();
+    const ctx = {
+      vault: homeVault,
+      store,
+      json: true,
+      registry: {} as AppContext['registry'],
+      evolver: {} as AppContext['evolver'],
+      assetTypes: {} as AppContext['assetTypes'],
+      adapters: [],
+    } as AppContext;
+
+    const vaultPath = path.join(dir, PROJECT_VAULT_DIRNAME);
+    mkdirSync(vaultPath, { recursive: true });
+    const sentinel = 'version: "1"\nrules:\n  - pathGlob: "**/sentinel"\n    exclude: true\n';
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(path.join(vaultPath, 'bootstrap-rules.yaml'), sentinel, 'utf8');
+
+    const origWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    try {
+      await cmdInit(ctx, { project: true, cwd: dir });
+    } finally {
+      process.stdout.write = origWrite;
+      store.close();
+    }
+    expect(
+      readFileSync(path.join(vaultPath, 'bootstrap-rules.yaml'), 'utf8'),
+    ).toBe(sentinel);
   });
 
   it('given no git when init project then throws', async () => {

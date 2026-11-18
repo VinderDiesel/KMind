@@ -116,5 +116,29 @@ export const KMindConfigSchema = z.object({
       coCiteLimit: z.number().int().min(1).max(20).default(5),
     })
     .default({}),
+  /**
+   * ADR-004 knowledge-init bootstrap (deterministic × optional local LLM).
+   * Never auto-captures knowledge bodies.
+   */
+  bootstrap: z
+    .object({
+      /** Relative to vault root; default bootstrap-rules.yaml when present. */
+      rulesPath: z.string().optional(),
+      /** Optional LLM semantic grouping (default off). */
+      llmGrouping: z.boolean().default(false),
+      /** Optional LLM planNotes for high-churn groups (default off). */
+      llmPlan: z.boolean().default(false),
+      /** File-count priority threshold before planNotes LLM call. */
+      planPriorityThreshold: z.number().int().nonnegative().default(40),
+      llm: z
+        .object({
+          endpoint: z.string().default('http://127.0.0.1:11434'),
+          /** Empty model disables LLM calls even when flags are true. */
+          model: z.string().default(''),
+          timeoutMs: z.number().int().min(500).max(120_000).default(15_000),
+        })
+        .default({}),
+    })
+    .default({}),
 });
 export type KMindConfig = z.infer<typeof KMindConfigSchema>;

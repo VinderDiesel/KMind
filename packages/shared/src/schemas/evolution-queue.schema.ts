@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const EvolutionTodoSourceEnum = z.enum(['health', 'coverage']);
+export const EvolutionTodoSourceEnum = z.enum(['health', 'coverage', 'bootstrap']);
 export type EvolutionTodoSource = z.infer<typeof EvolutionTodoSourceEnum>;
 
 export const EvolutionTodoStatusEnum = z.enum(['open', 'done', 'dismissed']);
@@ -17,6 +17,10 @@ export const EvolutionTodoSchema = z.object({
   message: z.string().min(1),
   /** Suggested next step for Agents / humans (not auto-executed). */
   nextAction: z.string().optional(),
+  /** ADR-004 DigTask id when source=bootstrap. */
+  digTaskId: z.string().optional(),
+  /** DigGroup label when source=bootstrap. */
+  groupLabel: z.string().optional(),
   status: EvolutionTodoStatusEnum.default('open'),
   updatedAt: z.string().datetime(),
 });

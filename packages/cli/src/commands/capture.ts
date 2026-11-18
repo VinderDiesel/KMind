@@ -6,9 +6,15 @@ import {
   attachProtocolToCoverage,
   BlobStore,
   createPipeline,
+  emptyBootstrapProgress,
+  hashBootstrapPlan,
+  buildBootstrapPlanForVault,
   inferCodeRootFromVault,
   isOverviewTitle,
+  loadBootstrapProgress,
+  saveBootstrapProgress,
   sanitizeTitle,
+  upsertProgressTask,
 } from '@kmind/core';
 import {
   AssetLinkSchema,
@@ -36,6 +42,8 @@ export async function cmdCapture(
     related?: string;
     /** JSON array of { id, relation } typed links. */
     links?: string;
+    /** Mark DigTask done in bootstrap progress after successful capture. */
+    bootstrapTask?: string;
   },
 ): Promise<void> {
   const blob = new BlobStore(ctx.vault.rawDir);
@@ -152,6 +160,37 @@ export async function cmdCapture(
     ctx.store,
     coverageBase,
   );
+
+  let bootstrapMarked: string | undefined;
+  const bootstrapTask = options.bootstrapTask?.trim();
+  if (bootstrapTask && result.created > 0) {
+    const newest = afterAssets
+      .filter((a) => a.title === title)
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
+    try {
+      const plan = await buildBootstrapPlanForVault(ctx.vault, ctx.store, {
+        project,
+      });
+      let progress =
+        (await loadBootstrapProgress(ctx.vault, project)) ??
+        emptyBootstrapProgress(
+          project,
+          inferCodeRootFromVault(ctx.vault.root),
+          hashBootstrapPlan(plan),
+        );
+      progress = upsertProgressTask(
+        progress,
+        bootstrapTask,
+        'done',
+        newest?.id,
+      );
+      await saveBootstrapProgress(ctx.vault, progress);
+      bootstrapMarked = bootstrapTask;
+    } catch {
+      /* mark is best-effort */
+    }
+  }
+
   success(
     {
       relativePath,
@@ -170,6 +209,7 @@ export async function cmdCapture(
       claimCompleteAllowed: coverage.claimCompleteAllowed,
       protocolViolation: coverage.protocolViolation,
       recentRecall: coverage.recentRecall,
+      ...(bootstrapMarked ? { bootstrapMarked } : {}),
     },
     ctx.json,
   );

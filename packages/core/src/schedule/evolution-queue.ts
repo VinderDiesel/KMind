@@ -12,6 +12,7 @@ import type { SqliteStore } from '../storage/sqlite-store.js';
 import { runHealthCheck } from '../health/checker.js';
 import { inferCodeRootFromVault } from '../query/anchor-fs.js';
 import { assessProjectCoverage } from '../query/coverage.js';
+import { buildBootstrapPlanForVault } from '../bootstrap/vault-plan.js';
 
 /**
  * Path for persisted evolution todo queue under vault audit/.
@@ -153,6 +154,36 @@ export async function runEvolutionScan(
         status: kept?.status ?? 'open',
         updatedAt: scannedAt,
       });
+    }
+
+    // ADR-004: open DigTasks become bootstrap evolution todos (diagnosis only).
+    try {
+      const plan = await buildBootstrapPlanForVault(vault, store, {
+        project,
+        repoRoot: codeRoot,
+      });
+      for (const group of plan.groups) {
+        for (const task of group.tasks) {
+          if (task.status === 'done') continue;
+          const id = todoId('bootstrap', 'dig_task', `${project}:${task.id}`);
+          const kept = preserved.get(id);
+          upsert({
+            id,
+            source: 'bootstrap',
+            severity: 'medium',
+            project,
+            code: 'dig_task',
+            message: `${group.label}: ${task.titleHint} (${task.candidateType})`,
+            digTaskId: task.id,
+            groupLabel: group.label,
+            nextAction: `Delegate group="${group.label}" then dig ${task.id}; capture with bootstrapTask=${task.id}; kmind_coverage`,
+            status: kept?.status ?? 'open',
+            updatedAt: scannedAt,
+          });
+        }
+      }
+    } catch {
+      // Inventory failure must not abort coverage/health evolution scan.
     }
   }
 

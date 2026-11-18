@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createKnowledgeAsset, resetFactoryCounters } from '@kmind/shared';
@@ -50,6 +50,43 @@ describe('evolution queue', () => {
     expect(queue.summary.open).toBeGreaterThan(0);
     const loaded = await loadEvolutionQueue(vault);
     expect(loaded.summary.open).toBe(queue.summary.open);
+  });
+
+  it('given open DigTask when evolution scan then item has digTaskId and groupLabel', async () => {
+    const repo = mkdtempSync(path.join(tmpdir(), 'kmind-evo-repo-'));
+    const src = path.join(repo, 'packages', 'core', 'src');
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      path.join(src, 'storage.ts'),
+      'export function createVault() {}\n',
+      'utf8',
+    );
+    const projectVaultRoot = path.join(repo, '.kmind-knowledge');
+    const vault = createVault(projectVaultRoot);
+    await vault.init();
+    const repoStore = new SqliteStore(vault.indexPath);
+    await repoStore.migrate();
+    await repoStore.upsertAsset(
+      createKnowledgeAsset({
+        id: 'k-2026-11-18-300',
+        title: 'demo 总览',
+        type: 'architecture_design',
+        project: 'demo',
+        body: '## 导航\nthin hub\n',
+      }),
+    );
+    try {
+      const { queue } = await runEvolutionScan(vault, repoStore);
+      const boot = queue.items.find(
+        (i) => i.source === 'bootstrap' && i.code === 'dig_task',
+      );
+      expect(boot?.digTaskId).toMatch(/^dig-/);
+      expect(boot?.groupLabel).toBeTruthy();
+      expect(boot?.nextAction).toContain('bootstrapTask=');
+    } finally {
+      repoStore.close();
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 
   it('given ack done when rescan then preserves done status for same id', async () => {

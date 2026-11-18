@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   createVault,
   projectVaultPath,
@@ -13,6 +14,75 @@ import { ensureProjectFeatureTree } from './feature-tree.js';
 import { findGitRoot } from './find-git-root.js';
 import { installProjectAgentContext } from './project-context.js';
 import { installProjectGitHooks } from './project-hooks.js';
+
+const BOOTSTRAP_RULES_FILENAME = 'bootstrap-rules.yaml';
+
+/**
+ * Resolve bundled templates/project-vault/bootstrap-rules.yaml.
+ */
+async function findBootstrapRulesTemplatePath(): Promise<string> {
+  const start = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(
+      start,
+      '..',
+      '..',
+      '..',
+      '..',
+      'templates',
+      'project-vault',
+      BOOTSTRAP_RULES_FILENAME,
+    ),
+    path.resolve(
+      start,
+      '..',
+      '..',
+      'templates',
+      'project-vault',
+      BOOTSTRAP_RULES_FILENAME,
+    ),
+    path.resolve(
+      start,
+      '..',
+      'templates',
+      'project-vault',
+      BOOTSTRAP_RULES_FILENAME,
+    ),
+  ];
+  for (const abs of candidates) {
+    try {
+      await fs.access(abs);
+      return abs;
+    } catch {
+      /* try next */
+    }
+  }
+  throw new KMindError('bootstrap-rules template not found', {
+    category: 'ADAPTER_ERROR',
+    severity: 'medium',
+    retryable: false,
+    suggestion:
+      'Ensure templates/project-vault/bootstrap-rules.yaml exists in the KMind checkout',
+  });
+}
+
+/**
+ * Copy bootstrap-rules.yaml into vault when missing (never overwrite).
+ */
+export async function ensureBootstrapRulesYaml(
+  vaultRoot: string,
+): Promise<{ action: 'created' | 'kept'; path: string }> {
+  const dest = path.join(vaultRoot, BOOTSTRAP_RULES_FILENAME);
+  try {
+    await fs.access(dest);
+    return { action: 'kept', path: dest };
+  } catch {
+    /* missing */
+  }
+  const template = await findBootstrapRulesTemplatePath();
+  await fs.copyFile(template, dest);
+  return { action: 'created', path: dest };
+}
 
 const PROJECT_VAULT_GITIGNORE = [
   '# Local-only (never commit)',
@@ -85,6 +155,7 @@ async function initProjectVault(json: boolean, cwd: string): Promise<void> {
   );
 
   const featureTree = await ensureProjectFeatureTree(vaultPath);
+  const bootstrapRules = await ensureBootstrapRulesYaml(vaultPath);
   const agentContext = await installProjectAgentContext(repoRoot);
   const hooks = await installProjectGitHooks(repoRoot);
 
@@ -96,9 +167,10 @@ async function initProjectVault(json: boolean, cwd: string): Promise<void> {
       vaultPath,
       vaultDirname: PROJECT_VAULT_DIRNAME,
       featureTree,
+      bootstrapRules,
       agentContext,
       hooks,
-      message: `Initialized project vault at ${vaultPath}. Maintain ${path.join(PROJECT_VAULT_DIRNAME, 'FEATURE_TREE.md')}; commit shared vault paths + AGENTS.md + .githooks/; restart AI terminals.`,
+      message: `Initialized project vault at ${vaultPath}. Maintain ${path.join(PROJECT_VAULT_DIRNAME, 'FEATURE_TREE.md')} and bootstrap-rules.yaml; commit shared vault paths + AGENTS.md + .githooks/; restart AI terminals.`,
     },
     json,
   );

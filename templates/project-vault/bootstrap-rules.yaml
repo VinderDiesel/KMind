@@ -1,0 +1,16 @@
+# ADR-004 bootstrap rules overlay (first-match wins).
+# Commit with the project vault; edit for your monorepo layout.
+version: "1"
+rules:
+  # Skip test / fixture trees from DigTask inventory
+  - pathGlob: "**/test/**"
+    exclude: true
+  - pathGlob: "**/__tests__/**"
+    exclude: true
+  - pathGlob: "**/fixtures/**"
+    exclude: true
+  # Adapters / terminal glue often fit tool_usage better than architecture
+  - pathGlob: "**/adapters/**"
+    candidateType: tool_usage
+    titleHint: "Terminal adapter"
+    notes: "Capture install paths and MCP config pitfalls with evidence"

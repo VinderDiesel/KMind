@@ -13,6 +13,14 @@ Canonical Zod schemas live in `packages/shared/src/schemas/`.
 - `links[]`: typed edges `{ id, relation }` (`solves` | `verifies` | `results_in` | `part_of` | …)
 - `metadata.codeAnchors[]`: `{ file, symbol?, kind?, line?, projectPath?, confidence }` — code citations (not full source dumps). Parsed from `## 代码锚点` bullets, `path:L42` citations, or capture `anchors` JSON.
 
+## Bootstrap plan (ADR-004)
+
+- Zod: `BootstrapPlan` / `DigGroup` / `DigTask` / `BootstrapModule` / `BootstrapProgress` / `BootstrapDigPacket` / `BootstrapRuleEntry`
+- Config: `bootstrap.llmGrouping` / `llmPlan` (default false), `bootstrap-rules.yaml` overlay
+- Progress: `audit/bootstrap-progress.json`; evolution `source=bootstrap`
+- Surfaces: CLI `preview|apply-tree|sync-tree|status|mark|delegate`; MCP `kmind_bootstrap_*`
+- No knowledge body text in any bootstrap artifact
+
 ## Asset types (ADR-001)
 
 - Builtin defs in `@kmind/core`; vault overlays in `vault/asset-types/*.{yaml,yml,json}` (deep merge by id)

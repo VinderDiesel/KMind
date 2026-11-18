@@ -20,18 +20,25 @@ import {
   attachProtocolToCoverage,
   buildCaptureSuggestions,
   inferCodeRootFromVault,
+  buildBootstrapPlanForVault,
+  buildDigPacket,
+  hashBootstrapPlan,
+  loadBootstrapProgress,
   loadEvolutionQueue,
+  markBootstrapProgressTask,
   runEvolutionScan,
   isOverviewTitle,
   MarkdownStore,
   retireExpired,
   deprecateAllExpired,
+  summarizeDelegateGroups,
   type AssetTypeRegistry,
   type ExportFilter,
   type ImportConflictPolicy,
 } from '@kmind/core';
 import {
   AssetLinkSchema,
+  DigTaskStatusEnum,
   KnowledgeTypeIdSchema,
   type KnowledgeType,
   KMindError,
@@ -242,6 +249,116 @@ async function dispatch(
           ? args.hubId.trim()
           : undefined;
       return ctx.engine.coverage({ project, topic, hubId });
+    }
+    case 'kmind_bootstrap_preview': {
+      const project = String(args.project ?? '').trim();
+      if (!project || project === 'global') {
+        return {
+          error: 'project_required',
+          suggestion: '传明确 project（禁止缺省/global）',
+        };
+      }
+      const repoArg =
+        typeof args.repoPath === 'string' && args.repoPath.trim()
+          ? args.repoPath.trim()
+          : undefined;
+      const repoRoot = repoArg
+        ? path.resolve(repoArg)
+        : inferCodeRootFromVault(ctx.vault.root);
+      const plan = await buildBootstrapPlanForVault(ctx.vault, ctx.store, {
+        project,
+        repoRoot,
+      });
+      return {
+        ...plan,
+        note: 'BootstrapPlan is a dig checklist only — not knowledge complete. Dig per DigGroup / kmind_bootstrap_delegate, then capture_suggest→capture, then kmind_coverage.',
+      };
+    }
+    case 'kmind_bootstrap_status': {
+      const project = String(args.project ?? '').trim();
+      if (!project || project === 'global') {
+        return { error: 'project_required' };
+      }
+      const progress = await loadBootstrapProgress(ctx.vault, project);
+      return progress ?? { project, tasks: [], note: 'no progress yet' };
+    }
+    case 'kmind_bootstrap_mark': {
+      const project = String(args.project ?? '').trim();
+      const taskId = String(args.taskId ?? '').trim();
+      const statusParse = DigTaskStatusEnum.safeParse(String(args.status ?? ''));
+      if (!project || project === 'global' || !taskId || !statusParse.success) {
+        return {
+          error: 'invalid_args',
+          suggestion: 'project + taskId + status(todo|capturing|done)',
+        };
+      }
+      const repoArg =
+        typeof args.repoPath === 'string' && args.repoPath.trim()
+          ? path.resolve(args.repoPath.trim())
+          : inferCodeRootFromVault(ctx.vault.root);
+      const plan = await buildBootstrapPlanForVault(ctx.vault, ctx.store, {
+        project,
+        repoRoot: repoArg,
+      });
+      const known = plan.groups.some((g) =>
+        g.tasks.some((t) => t.id === taskId),
+      );
+      if (!known) {
+        return { error: 'unknown_task', taskId };
+      }
+      const assetId =
+        typeof args.assetId === 'string' && args.assetId.trim()
+          ? args.assetId.trim()
+          : undefined;
+      const { path: file, progress } = await markBootstrapProgressTask({
+        vault: ctx.vault,
+        project,
+        repoRoot: repoArg,
+        taskId,
+        status: statusParse.data,
+        assetId,
+        planHash: hashBootstrapPlan(plan),
+      });
+      return { ok: true, path: file, progress };
+    }
+    case 'kmind_bootstrap_delegate': {
+      const project = String(args.project ?? '').trim();
+      if (!project || project === 'global') {
+        return { error: 'project_required' };
+      }
+      const repoArg =
+        typeof args.repoPath === 'string' && args.repoPath.trim()
+          ? path.resolve(args.repoPath.trim())
+          : inferCodeRootFromVault(ctx.vault.root);
+      const plan = await buildBootstrapPlanForVault(ctx.vault, ctx.store, {
+        project,
+        repoRoot: repoArg,
+      });
+      const groupLabel =
+        typeof args.groupLabel === 'string' && args.groupLabel.trim()
+          ? args.groupLabel.trim()
+          : undefined;
+      if (!groupLabel) {
+        const summary = summarizeDelegateGroups(plan);
+        return {
+          project,
+          ...summary,
+          note: 'Pass groupLabel for a DigPacket; prefer recommendedNext when set',
+        };
+      }
+      try {
+        const packet = buildDigPacket({
+          plan,
+          groupLabel,
+          skipDone: true,
+        });
+        return packet;
+      } catch (err) {
+        return {
+          error: 'unknown_group',
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
     }
     case 'kmind_related': {
       const id = String(args.id);
@@ -567,6 +684,32 @@ async function dispatch(
         ctx.store,
         coverageBase,
       );
+      let bootstrapMarked: string | undefined;
+      let bootstrapMarkError: string | undefined;
+      const bootstrapTask =
+        typeof args.bootstrapTask === 'string'
+          ? args.bootstrapTask.trim()
+          : '';
+      if (bootstrapTask && result.created > 0) {
+        const newest = afterAssets
+          .filter((a) => a.title === title)
+          .sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
+        try {
+          const repoRoot = inferCodeRootFromVault(ctx.vault.root);
+          await markBootstrapProgressTask({
+            vault: ctx.vault,
+            project,
+            repoRoot,
+            taskId: bootstrapTask,
+            status: 'done',
+            assetId: newest?.id,
+          });
+          bootstrapMarked = bootstrapTask;
+        } catch (err) {
+          bootstrapMarkError =
+            err instanceof Error ? err.message : String(err);
+        }
+      }
       return {
         captured: true,
         relativePath,
@@ -585,6 +728,8 @@ async function dispatch(
         claimCompleteAllowed: coverage.claimCompleteAllowed,
         protocolViolation: coverage.protocolViolation,
         recentRecall: coverage.recentRecall,
+        ...(bootstrapMarked ? { bootstrapMarked } : {}),
+        ...(bootstrapMarkError ? { bootstrapMarkError } : {}),
         ...(quality.hints.length ? { hints: quality.hints } : {}),
         ...(coverage.complete
           ? {}

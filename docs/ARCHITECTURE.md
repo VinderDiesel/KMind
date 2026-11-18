@@ -37,6 +37,7 @@ Never commit: `raw/`, `index.db`, `audit/`, `diagnostics/`. Sync rides normal `g
 - `query` — fulltext / structured / graph / semantic / hybrid / ego / **context-pack** (`kmind_pack`)
 - `health` — lint rules
 - `schedule` / **evolution-queue** — cron maintenance + ADR-002 coverage/lint todo queue (`audit/evolution-queue.json`)
+- `bootstrap` — **ADR-004** knowledge-init (`select` → `group` → types → plan; optional local LLM grouping/planNotes; DigPacket delegate; progress in `audit/`). CLI: `preview|apply-tree|sync-tree|status|mark|delegate`. MCP: `kmind_bootstrap_*`. Never auto-captures bodies. See [ADR-004](adr/004-knowledge-bootstrap-hybrid.md).
 - `observability` — MCP tool audit (`audit/YYYY-MM-DD.jsonl`) + **search/pack query logs** (`audit/search-queries/YYYY-MM-DD.jsonl`, every CLI/MCP/UI recall; not committed)
 - `migration` — export / import
 

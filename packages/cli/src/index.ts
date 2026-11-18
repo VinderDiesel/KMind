@@ -22,6 +22,14 @@ import { cmdPurgeSessions } from './commands/purge-sessions.js';
 import { cmdExpiry } from './commands/expiry.js';
 import { cmdCoverage } from './commands/coverage.js';
 import {
+  cmdBootstrapApplyTree,
+  cmdBootstrapDelegate,
+  cmdBootstrapMark,
+  cmdBootstrapPreview,
+  cmdBootstrapStatus,
+  cmdBootstrapSyncTree,
+} from './commands/bootstrap.js';
+import {
   cmdScheduleList,
   cmdScheduleRun,
   cmdScheduleSet,
@@ -93,6 +101,136 @@ featureTreeCmd
       fail(err, opts.json);
     }
   });
+
+const bootstrapCmd = program
+  .command('bootstrap')
+  .description(
+    'ADR-004 knowledge-init plan: deterministic module select/group/type hints (no auto-capture)',
+  );
+
+bootstrapCmd
+  .command('preview')
+  .description('Preview DigGroup/DigTask plan for a repo (read-only)')
+  .requiredOption('--project <name>', 'Project name (required, not global)')
+  .option('--repo <path>', 'Code repo root (default: vault code root)')
+  .action(async (cmdOpts: { project: string; repo?: string }) => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await withVaultOrPrompt(opts);
+      await cmdBootstrapPreview(ctx, {
+        project: cmdOpts.project,
+        repo: cmdOpts.repo,
+      });
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+bootstrapCmd
+  .command('apply-tree')
+  .description(
+    'Write bootstrap dig rows into FEATURE_TREE.md (todo checklist; no capture)',
+  )
+  .requiredOption('--project <name>', 'Project name (required, not global)')
+  .option('--repo <path>', 'Code repo root (default: vault code root)')
+  .action(async (cmdOpts: { project: string; repo?: string }) => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await withVaultOrPrompt(opts);
+      await cmdBootstrapApplyTree(ctx, {
+        project: cmdOpts.project,
+        repo: cmdOpts.repo,
+      });
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+bootstrapCmd
+  .command('sync-tree')
+  .description(
+    'Re-apply FEATURE_TREE bootstrap section with progress-merged statuses',
+  )
+  .requiredOption('--project <name>', 'Project name (required, not global)')
+  .option('--repo <path>', 'Code repo root (default: vault code root)')
+  .action(async (cmdOpts: { project: string; repo?: string }) => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await withVaultOrPrompt(opts);
+      await cmdBootstrapSyncTree(ctx, {
+        project: cmdOpts.project,
+        repo: cmdOpts.repo,
+      });
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+bootstrapCmd
+  .command('status')
+  .description('Show persisted bootstrap dig progress (audit/)')
+  .requiredOption('--project <name>', 'Project name (required, not global)')
+  .action(async (cmdOpts: { project: string }) => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await withVaultOrPrompt(opts);
+      await cmdBootstrapStatus(ctx, { project: cmdOpts.project });
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+bootstrapCmd
+  .command('mark')
+  .description('Mark a DigTask status in bootstrap progress (no capture)')
+  .requiredOption('--project <name>', 'Project name')
+  .requiredOption('--task <id>', 'DigTask id (e.g. dig-packages-core-storage)')
+  .requiredOption('--status <s>', 'todo | capturing | done')
+  .option('--asset <id>', 'Asset id when marking done')
+  .option('--repo <path>', 'Code repo root')
+  .action(
+    async (cmdOpts: {
+      project: string;
+      task: string;
+      status: string;
+      asset?: string;
+      repo?: string;
+    }) => {
+      const opts = program.opts<{ json?: boolean; vault?: string }>();
+      try {
+        const ctx = await withVaultOrPrompt(opts);
+        await cmdBootstrapMark(ctx, cmdOpts);
+        ctx.store.close();
+      } catch (err) {
+        fail(err, opts.json);
+      }
+    },
+  );
+
+bootstrapCmd
+  .command('delegate')
+  .description(
+    'Emit DigPacket for host-agent dig (list groups or --group packet)',
+  )
+  .requiredOption('--project <name>', 'Project name')
+  .option('--group <label>', 'DigGroup label for a DigPacket')
+  .option('--repo <path>', 'Code repo root')
+  .action(
+    async (cmdOpts: { project: string; group?: string; repo?: string }) => {
+      const opts = program.opts<{ json?: boolean; vault?: string }>();
+      try {
+        const ctx = await withVaultOrPrompt(opts);
+        await cmdBootstrapDelegate(ctx, cmdOpts);
+        ctx.store.close();
+      } catch (err) {
+        fail(err, opts.json);
+      }
+    },
+  );
 
 program
   .command('compile')
@@ -211,6 +349,10 @@ program
   .option(
     '--links <json>',
     'Typed links JSON, e.g. \'[{"id":"k-…-001","relation":"solves"}]\'',
+  )
+  .option(
+    '--bootstrap-task <id>',
+    'After successful capture, mark DigTask done in bootstrap progress',
   )
   .action(async (content, cmdOpts) => {
     const opts = program.opts<{ json?: boolean; vault?: string }>();

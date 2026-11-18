@@ -3,6 +3,7 @@ export * from './schemas/asset-type.schema.js';
 export * from './schemas/context-pack.schema.js';
 export * from './schemas/capture-suggestion.schema.js';
 export * from './schemas/evolution-queue.schema.js';
+export * from './schemas/bootstrap.schema.js';
 export * from './schemas/ontology.schema.js';
 export * from './schemas/config.schema.js';
 export * from './schemas/session.schema.js';

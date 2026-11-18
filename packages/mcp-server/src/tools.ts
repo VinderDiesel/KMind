@@ -166,6 +166,72 @@ export const MCP_TOOLS: McpToolDef[] = [
     },
   },
   {
+    name: 'kmind_bootstrap_preview',
+    description:
+      'ADR-004 knowledge-init plan (read): select→group→candidate types (+ optional LLM when configured). Returns BootstrapPlan. Does NOT write bodies or claim complete. Call first when「整理某系统」; then dig / delegate; coverage last.',
+    effect: 'read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description: 'Required project scope (not global)',
+        },
+        repoPath: {
+          type: 'string',
+          description:
+            'Code repo root (default: parent of .kmind-knowledge or vault root)',
+        },
+      },
+      required: ['project'],
+    },
+  },
+  {
+    name: 'kmind_bootstrap_status',
+    description:
+      'ADR-004 bootstrap dig progress (read): audit/bootstrap-progress.json for a project.',
+    effect: 'read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string' },
+      },
+      required: ['project'],
+    },
+  },
+  {
+    name: 'kmind_bootstrap_mark',
+    description:
+      'ADR-004 mark DigTask status in bootstrap progress (write). status=todo|capturing|done. Optional assetId when done. Does not capture knowledge.',
+    effect: 'write',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string' },
+        taskId: { type: 'string' },
+        status: { type: 'string', description: 'todo | capturing | done' },
+        assetId: { type: 'string' },
+        repoPath: { type: 'string' },
+      },
+      required: ['project', 'taskId', 'status'],
+    },
+  },
+  {
+    name: 'kmind_bootstrap_delegate',
+    description:
+      'ADR-004 DigPacket for host-agent dig (read). Omit groupLabel to list groups; set groupLabel for one DigPacket (todo tasks). Not knowledge complete.',
+    effect: 'read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string' },
+        groupLabel: { type: 'string' },
+        repoPath: { type: 'string' },
+      },
+      required: ['project'],
+    },
+  },
+  {
     name: 'kmind_retire_expired',
     description:
       'Retire expired knowledge cards (write). action=list|deprecate|supersede|refresh|deprecate-all. deprecate drops card from coverage; supersede requires by=<newId>; refresh clears or sets expiresAt. Prefer dryRun=true first. Closes expired_asset coverage gaps.',
@@ -316,6 +382,11 @@ export const MCP_TOOLS: McpToolDef[] = [
             },
             required: ['id', 'relation'],
           },
+        },
+        bootstrapTask: {
+          type: 'string',
+          description:
+            'ADR-004 DigTask id: on successful capture, mark that task done in bootstrap progress (same as CLI --bootstrap-task). Does not auto-write knowledge body.',
         },
       },
       required: ['content'],
