@@ -16,6 +16,14 @@ export interface CaptureQualityOptions {
   hubIds?: string[];
   /** ADR-001: type def from AssetTypeRegistry (sections + whitelist rules). */
   typeDef?: AssetTypeDef;
+  /**
+   * When true, topic-drift becomes a hard reason; otherwise soft hint only.
+   * Mirrors config.capture.strictTopic.
+   */
+  strictTopic?: boolean;
+  /** DigTask.candidateType when capturing with bootstrapTask (hint only). */
+  bootstrapCandidateType?: string;
+  bootstrapTaskId?: string;
 }
 
 export interface CaptureQualityResult {
@@ -324,7 +332,50 @@ export function assessCaptureQuality(
     hints.push('总览卡请保持薄：阶段表/索引即可，细节放在 related 子节点');
   }
 
+  if (!overview && detectTopicDrift(title, text)) {
+    const msg =
+      '主题漂移：标题偏实现/符号，正文同时堆协议词（coverage/bootstrap/capture-propose/complete）— 请一卡一事拆分，协议约定另卡或进 Skill';
+    if (options.strictTopic) {
+      reasons.push(msg);
+    } else {
+      hints.push(msg);
+    }
+  }
+
+  const bootType = options.bootstrapCandidateType?.trim();
+  if (
+    !overview &&
+    bootType &&
+    type &&
+    bootType !== type
+  ) {
+    const task = options.bootstrapTaskId?.trim() || 'DigTask';
+    hints.push(
+      `Bootstrap ${task} 建议 type=${bootType}，当前为 ${type} — 按 DigPacket.candidateType 对齐或明示降级`,
+    );
+  }
+
   return { ok: reasons.length === 0, reasons, hints };
+}
+
+const PROTOCOL_TOPIC =
+  /coverage|complete\b|bootstrap|capture-propose|kmind_coverage|claimComplete|project\s*=\s*global|FEATURE_TREE/i;
+const IMPL_TOPIC =
+  /```|packages\/[\w./-]+|\.tsx?|\.jsx?|export\s+(async\s+)?function|function\s+\w+/;
+
+/**
+ * Detect mixed "code fixture + protocol dump" cards (smoke-quality blind spot).
+ */
+export function detectTopicDrift(title: string, text: string): boolean {
+  if (!PROTOCOL_TOPIC.test(text) || !IMPL_TOPIC.test(text)) return false;
+  const protocolHits = text.match(
+    /coverage|bootstrap|capture-propose|complete|project\s*=\s*global|FEATURE_TREE|kmind_coverage/gi,
+  );
+  if (!protocolHits || protocolHits.length < 2) return false;
+  const titleLooksProtocol =
+    /coverage|bootstrap|协议|质量闸|complete|propose|commit/i.test(title);
+  if (titleLooksProtocol) return false;
+  return true;
 }
 
 /**

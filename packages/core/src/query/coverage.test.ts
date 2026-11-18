@@ -87,23 +87,37 @@ describe('assessProjectCoverage', () => {
   it('given deep children and hub when assess then complete', () => {
     const c1 = asset({
       title: '问数 Router 分流',
+      type: 'architecture_design',
       body: DEEP_BODY,
       related: [],
     });
     const c2 = asset({
-      title: '问数 AskTrace',
+      title: '问数 AskTrace 工具',
+      type: 'tool_usage',
       body: DEEP_BODY.replace(/routeAsk/g, 'writeTrace').replace(
         /router\.ts/g,
         'trace.ts',
       ),
       related: [],
     });
-    const c3 = asset({
-      title: '问数 澄清策略',
-      body: DEEP_BODY.replace(/routeAsk/g, 'clarify').replace(
+    const c3 = createKnowledgeAsset({
+      title: '问数 澄清踩坑',
+      type: 'pitfall',
+      project: 'meta-brain',
+      body: `${DEEP_BODY.replace(/routeAsk/g, 'clarify').replace(
         /router\.ts/g,
         'clarify.ts',
-      ),
+      )}
+
+## 现象
+澄清槽位被跳过导致空 SQL。
+
+## 根因
+fallback 未写 AskTrace。
+
+## 正确做法
+缺边必须 clarify。
+`,
       related: [],
     });
     const hub = asset({
@@ -116,10 +130,14 @@ describe('assessProjectCoverage', () => {
       topic: '问数',
     });
     expect(report.complete).toBe(true);
+    expect(report.metrics.detailCount).toBe(3);
+    expect(Object.keys(report.metrics.typeHistogram).length).toBeGreaterThanOrEqual(
+      3,
+    );
     expect(report.nextActions[0]).toContain('覆盖已合格');
   });
 
-  it('given 3 architecture details when assess then no type_mono', () => {
+  it('given 3 architecture details when assess then type_homogeneous not type_mono', () => {
     const kids = [1, 2, 3].map((n) =>
       asset({
         title: `问数 模块${n}`,
@@ -137,7 +155,28 @@ describe('assessProjectCoverage', () => {
       topic: '问数',
     });
     expect(report.issues.some((i) => i.code === 'type_mono')).toBe(false);
-    expect(report.complete).toBe(true);
+    expect(report.issues.some((i) => i.code === 'type_homogeneous')).toBe(true);
+    expect(report.complete).toBe(false);
+    expect(report.metrics.typeHistogram.architecture_design).toBe(3);
+  });
+
+  it('given bootstrap done without hub when assess then bootstrap_done_without_hub', () => {
+    const detail = asset({
+      title: 'hello 纯函数导出',
+      type: 'best_practice',
+      project: 'smoke',
+      body: DEEP_BODY,
+      related: [],
+    });
+    const report = assessProjectCoverage([detail], {
+      project: 'smoke',
+      bootstrap: { tasksDone: 1, tasksTotal: 1 },
+    });
+    expect(
+      report.issues.some((i) => i.code === 'bootstrap_done_without_hub'),
+    ).toBe(true);
+    expect(report.metrics.featureTreeDoneRatio).toBe(1);
+    expect(report.complete).toBe(false);
   });
 
   it('given 4 architecture-only details when assess then type_mono blocks complete', () => {

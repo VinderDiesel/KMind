@@ -25,6 +25,10 @@ export interface CaptureSuggestInput {
   related?: string[];
   links?: AssetLink[];
   anchors?: Array<{ file?: string; symbol?: string; kind?: string; line?: number }>;
+  /** DigTask id when capturing from bootstrap; used with bootstrapCandidateType. */
+  bootstrapTask?: string;
+  /** DigTask.candidateType from BootstrapPlan (hint only). */
+  bootstrapCandidateType?: KnowledgeType;
 }
 
 export interface CaptureSuggestDeps {
@@ -130,6 +134,21 @@ export async function buildCaptureSuggestions(
       message: `architecture_design 疑似误标：正文模式更像 ${patternType} — 请改 type 并按该类型 scaffold 重写`,
       confidence: 0.88,
       apply: { type: patternType },
+    });
+  }
+
+  if (
+    input.bootstrapCandidateType &&
+    input.type &&
+    input.bootstrapCandidateType !== input.type
+  ) {
+    const taskLabel = input.bootstrapTask?.trim() || 'DigTask';
+    suggestions.push({
+      id: nextId('type'),
+      kind: 'type',
+      message: `Bootstrap ${taskLabel} 建议 candidateType=${input.bootstrapCandidateType}，当前 type=${input.type} — 按 DigPacket 改 type（或明示降级原因）；勿默认同质 best_practice`,
+      confidence: 0.82,
+      apply: { type: input.bootstrapCandidateType },
     });
   }
 

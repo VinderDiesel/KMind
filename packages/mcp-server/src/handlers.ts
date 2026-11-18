@@ -26,12 +26,17 @@ import {
   loadBootstrapProgress,
   loadEvolutionQueue,
   markBootstrapProgressTask,
+  resolveBootstrapCandidateType,
   runEvolutionScan,
   isOverviewTitle,
   MarkdownStore,
   retireExpired,
   deprecateAllExpired,
   summarizeDelegateGroups,
+  summarizeSearchQueryLogs,
+  appendRecallFeedback,
+  createCaptureProposal,
+  commitCaptureProposal,
   type AssetTypeRegistry,
   type ExportFilter,
   type ImportConflictPolicy,
@@ -380,6 +385,53 @@ async function dispatch(
       cache.set(key, status, 5_000);
       return status;
     }
+    case 'kmind_recall_stats': {
+      const project =
+        typeof args.project === 'string' && args.project.trim()
+          ? args.project.trim()
+          : undefined;
+      let windowHours = 24;
+      if (typeof args.windowHours === 'number' && Number.isFinite(args.windowHours)) {
+        windowHours = Math.floor(args.windowHours);
+      } else if (
+        typeof args.windowHours === 'string' &&
+        args.windowHours.trim()
+      ) {
+        windowHours = Math.floor(Number(args.windowHours));
+      }
+      if (!Number.isFinite(windowHours) || windowHours < 1) windowHours = 1;
+      if (windowHours > 168) windowHours = 168;
+      return summarizeSearchQueryLogs({
+        auditDir: ctx.vault.auditDir,
+        windowHours,
+        project,
+      });
+    }
+    case 'kmind_recall_feedback': {
+      if (typeof args.useful !== 'boolean') {
+        return {
+          error: 'invalid_args',
+          suggestion: 'useful must be boolean',
+        };
+      }
+      const path = await appendRecallFeedback(ctx.vault.auditDir, {
+        useful: args.useful,
+        focusId:
+          typeof args.focusId === 'string' && args.focusId.trim()
+            ? args.focusId.trim()
+            : undefined,
+        query:
+          typeof args.query === 'string' && args.query.trim()
+            ? args.query.trim()
+            : undefined,
+        note:
+          typeof args.note === 'string' && args.note.trim()
+            ? args.note.trim()
+            : undefined,
+        source: 'mcp',
+      });
+      return { ok: true, path, useful: args.useful };
+    }
     case 'kmind_ontology_describe': {
       const registry = new OntologyRegistry();
       registry.load(await loadOntology(ctx.vault.ontologyDir));
@@ -485,6 +537,18 @@ async function dispatch(
             .map((r) => r.data)
         : undefined;
       const anchors = Array.isArray(args.anchors) ? args.anchors : undefined;
+      const bootstrapTask =
+        typeof args.bootstrapTask === 'string' && args.bootstrapTask.trim()
+          ? args.bootstrapTask.trim()
+          : undefined;
+      const bootstrapCandidateType = bootstrapTask
+        ? await resolveBootstrapCandidateType(
+            ctx.vault,
+            ctx.store,
+            project,
+            bootstrapTask,
+          )
+        : undefined;
       const assetTypes = await resolveAssetTypes(ctx);
       return buildCaptureSuggestions(
         {
@@ -510,9 +574,136 @@ async function dispatch(
                 };
               })
             : undefined,
+          bootstrapTask,
+          bootstrapCandidateType,
         },
         { store: ctx.store, assetTypes },
       );
+    }
+    case 'kmind_capture_propose': {
+      const content = String(args.content ?? '');
+      const project = String(args.project ?? '').trim();
+      if (!content || !project || project === 'global') {
+        return {
+          error: 'invalid_args',
+          suggestion: 'content + project required (not global)',
+        };
+      }
+      const title = sanitizeTitle(
+        String(args.title ?? content.split('\n')[0] ?? 'untitled'),
+      );
+      const typeParse = KnowledgeTypeIdSchema.safeParse(
+        args.type ?? 'best_practice',
+      );
+      const type = typeParse.success ? typeParse.data : 'best_practice';
+      const related = Array.isArray(args.related)
+        ? args.related.filter((x): x is string => typeof x === 'string')
+        : undefined;
+      const links = Array.isArray(args.links)
+        ? args.links
+            .map((item) => AssetLinkSchema.safeParse(item))
+            .filter((r) => r.success)
+            .map((r) => r.data)
+        : undefined;
+      const anchors = Array.isArray(args.anchors)
+        ? args.anchors
+            .map((a) => {
+              const o = a as {
+                file?: string;
+                symbol?: string;
+                kind?: string;
+                line?: number;
+                confidence?: number;
+              };
+              return {
+                file: String(o.file ?? ''),
+                symbol: o.symbol,
+                kind: o.kind,
+                line: o.line,
+                confidence:
+                  typeof o.confidence === 'number' ? o.confidence : 1,
+              };
+            })
+            .filter((a) => a.file)
+        : undefined;
+      const bootstrapTask =
+        typeof args.bootstrapTask === 'string' && args.bootstrapTask.trim()
+          ? args.bootstrapTask.trim()
+          : undefined;
+      const proposal = await createCaptureProposal(ctx.vault, {
+        content,
+        title,
+        type,
+        project,
+        anchors,
+        related,
+        links,
+        bootstrapTask,
+      });
+      return {
+        proposed: true,
+        proposalId: proposal.id,
+        status: proposal.status,
+        note: 'Staged only — call kmind_capture_commit with proposalId to write knowledge',
+      };
+    }
+    case 'kmind_capture_commit': {
+      const proposalId = String(args.proposalId ?? '').trim();
+      if (!proposalId) {
+        return { error: 'invalid_args', suggestion: 'proposalId required' };
+      }
+      try {
+        const result = await commitCaptureProposal(ctx.vault, proposalId, {
+          execute: async (fields) => {
+            const nested = await dispatch(
+              'kmind_capture',
+              {
+                content: fields.content,
+                title: fields.title,
+                type: fields.type,
+                project: fields.project,
+                anchors: fields.anchors,
+                related: fields.related,
+                links: fields.links,
+                bootstrapTask: fields.bootstrapTask,
+              },
+              ctx,
+            );
+            const captured = nested as {
+              captured?: boolean;
+              title?: string;
+              compile?: { created?: number };
+            };
+            if (!captured.captured) {
+              throw new KMindError('capture commit failed quality or write', {
+                category: 'CAPTURE_ERROR',
+                severity: 'medium',
+                retryable: true,
+                suggestion: JSON.stringify(nested).slice(0, 400),
+              });
+            }
+            const afterAssets = await ctx.store.queryAssets({
+              project: fields.project,
+              limit: 100_000,
+            });
+            const newest = afterAssets
+              .filter((a) => a.title === fields.title)
+              .sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
+            return { assetId: newest?.id };
+          },
+        });
+        return {
+          committed: true,
+          proposalId: result.proposal.id,
+          assetId: result.assetId,
+          status: result.proposal.status,
+        };
+      } catch (err) {
+        return {
+          committed: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
     }
     case 'kmind_capture': {
       const content = String(args.content);
@@ -564,6 +755,19 @@ async function dispatch(
         .filter((a) => /总览|概览|索引|overview/i.test(a.title))
         .map((a) => a.id);
       const incremental = peers.length > 0;
+      const bootstrapTaskEarly =
+        typeof args.bootstrapTask === 'string' && args.bootstrapTask.trim()
+          ? args.bootstrapTask.trim()
+          : undefined;
+      const bootstrapCandidateType = bootstrapTaskEarly
+        ? await resolveBootstrapCandidateType(
+            ctx.vault,
+            ctx.store,
+            project,
+            bootstrapTaskEarly,
+          )
+        : undefined;
+      const vaultConfig = await ctx.vault.getConfig();
       const quality = assessCaptureQuality(content, type, {
         title,
         related,
@@ -577,6 +781,13 @@ async function dispatch(
         incremental,
         hubIds,
         typeDef,
+        strictTopic: vaultConfig.capture.strictTopic === true,
+        ...(bootstrapCandidateType
+          ? {
+              bootstrapCandidateType,
+              bootstrapTaskId: bootstrapTaskEarly,
+            }
+          : {}),
       });
       let overviewChildGate: {
         ok: boolean;

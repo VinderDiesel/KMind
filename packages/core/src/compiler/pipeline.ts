@@ -257,6 +257,7 @@ class PipelineImpl implements CompilePipeline {
               incremental: peers.length > 0,
               hubIds,
               typeDef: assetTypes?.get(classified.type),
+              strictTopic: vaultConfig.capture.strictTopic === true,
             },
           );
           if (!quality.ok) {

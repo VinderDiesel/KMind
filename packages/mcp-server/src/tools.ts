@@ -121,6 +121,38 @@ export const MCP_TOOLS: McpToolDef[] = [
     inputSchema: { type: 'object', properties: {} },
   },
   {
+    name: 'kmind_recall_stats',
+    description:
+      'ADR-002 local recall observability: summarize audit/search-queries JSONL (search vs pack, emptyRate, top pack focusIds). Optional project + windowHours (1–168, default 24). Not cloud metrics; never writes knowledge.',
+    effect: 'read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string' },
+        windowHours: {
+          type: 'number',
+          description: 'Lookback hours (1–168, default 24)',
+        },
+      },
+    },
+  },
+  {
+    name: 'kmind_recall_feedback',
+    description:
+      'ADR-002 local usefulness feedback for pack/search (write). Appends audit/recall-feedback JSONL only — never mutates knowledge Markdown. Pass useful=true|false; optional focusId, query, note.',
+    effect: 'write',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        useful: { type: 'boolean' },
+        focusId: { type: 'string' },
+        query: { type: 'string' },
+        note: { type: 'string' },
+      },
+      required: ['useful'],
+    },
+  },
+  {
     name: 'kmind_ontology_describe',
     description:
       'Describe ontology structure or a specific class. Read-only; does not mutate ontology.',
@@ -144,7 +176,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   {
     name: 'kmind_coverage',
     description:
-      'Assess whether a project/topic is dug deep vs catalog-only. complete=false on shallow hubs/children, duplicate overviews, missing anchors, type_mono, broken_anchor_path, broken_anchor_symbol, or expired_asset. Also returns protocolViolation + recentRecall. For expired_asset use kmind_retire_expired. REQUIRED before claiming「知识已完整」; search hits alone ≠ complete.',
+      'Assess whether a project/topic is dug deep vs catalog-only. complete=false on shallow hubs/children, duplicate overviews, missing anchors, type_mono, type_homogeneous, bootstrap_done_without_hub, broken_anchor_path, broken_anchor_symbol, or expired_asset. Returns metrics + quality (coverage/content/diversity scores), protocolViolation + recentRecall. For expired_asset use kmind_retire_expired. REQUIRED before claiming「知识已完整」; search hits alone ≠ complete.',
     effect: 'read',
     inputSchema: {
       type: 'object',
@@ -323,6 +355,39 @@ export const MCP_TOOLS: McpToolDef[] = [
         },
       },
       required: ['content', 'project'],
+    },
+  },
+  {
+    name: 'kmind_capture_propose',
+    description:
+      'ADR-002 optional two-phase write (stage only): persist CaptureProposal under audit/proposals (no knowledge body written). Pass same fields as kmind_capture. Prefer when config.capture.twoPhase=true; direct kmind_capture still allowed.',
+    effect: 'write',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string' },
+        type: { type: 'string' },
+        project: { type: 'string' },
+        title: { type: 'string' },
+        anchors: { type: 'array', items: { type: 'object' } },
+        related: { type: 'array', items: { type: 'string' } },
+        links: { type: 'array', items: { type: 'object' } },
+        bootstrapTask: { type: 'string' },
+      },
+      required: ['content', 'project'],
+    },
+  },
+  {
+    name: 'kmind_capture_commit',
+    description:
+      'ADR-002 commit a staged CaptureProposal by id (write). Runs the same capture path as kmind_capture; second commit on same id fails. Does not invent knowledge body.',
+    effect: 'write',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        proposalId: { type: 'string' },
+      },
+      required: ['proposalId'],
     },
   },
   {

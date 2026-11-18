@@ -38,6 +38,16 @@ export const KMindConfigSchema = z.object({
        * Forces project-scoped knowledge for reliable filters.
        */
       requireProject: z.boolean().default(true),
+      /**
+       * When true, Skills should prefer kmind_capture_propose → commit.
+       * Runtime still allows direct kmind_capture (ADR-002 M6; default off).
+       */
+      twoPhase: z.boolean().default(false),
+      /**
+       * When true, title/body topic-drift (code fixture + protocol dump) fails quality gate.
+       * Default false — emit hints only (ADR quality dimensions).
+       */
+      strictTopic: z.boolean().default(false),
     })
     .default({}),
   adapters: z

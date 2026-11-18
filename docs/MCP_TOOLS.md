@@ -9,16 +9,20 @@ Effect levels: `read` | `write` | `sensitive`
 | `kmind_get` | read | Fetch one asset by exact id (prefer over search when id is known) |
 | `kmind_related` | read | Related assets by graph |
 | `kmind_problem_status` | read | Problem resolution: `open` / `addressed` / `verified` via `solves` + `verifies` |
-| `kmind_coverage` | read | **Depth vs catalog:** `complete` + issues/nextActions for a `project` (+ optional `topic`/`hubId`). Also `broken_anchor_path` / `expired_asset`, plus `protocolViolation` + `recentRecall` (24h; warn only for session pollution / no recall). Includes `type_mono` when details are almost all `architecture_design`. Required before claiming「知识已完整」; search hits alone ≠ complete |
+| `kmind_coverage` | read | **Depth vs catalog:** `complete` + issues/nextActions for a `project` (+ optional `topic`/`hubId`). Also `broken_anchor_path` / `expired_asset`, plus `protocolViolation` + `recentRecall` (24h; warn only for session pollution / no recall). Includes `type_mono` / `type_homogeneous` / `bootstrap_done_without_hub`, `metrics`, and **`quality`**（覆盖率·内容·种类三维分数）. Required before claiming「知识已完整」; search hits alone ≠ complete. CLI alias: `kmind quality` |
 | `kmind_bootstrap_preview` | read | **ADR-004 init plan:** select→group→types (+ optional LLM). `BootstrapPlan`. Optional `repoPath`. Not complete. |
 | `kmind_bootstrap_status` | read | Bootstrap dig progress (`audit/bootstrap-progress.json`) |
 | `kmind_bootstrap_mark` | write | Mark DigTask `todo\|capturing\|done` (optional `assetId`); no capture |
 | `kmind_bootstrap_delegate` | read | DigPacket for one `groupLabel`, or list groups with `recommendedNext` + `stats`; host-agent dig checklist |
 | `kmind_status` | read | Vault health stats |
+| `kmind_recall_stats` | read | **ADR-002 M6** local recall stats from `audit/search-queries` (`emptyRate`, pack vs search, `topFocusIds`). Optional `project` / `windowHours` (1–168) |
+| `kmind_recall_feedback` | write | Local usefulness feedback → `audit/recall-feedback` JSONL only (never mutates knowledge) |
 | `kmind_ontology_describe` | read | Ontology class/relation info |
 | `kmind_asset_types` | read | ADR-001 asset type registry: scaffold / guidance / requiredSections / rules (enabled by default; `includeDisabled` / `id`) |
 | `kmind_evolution_queue` | read | **ADR-002 evolution todos:** coverage + lint queue (`refresh` to rescan). Diagnosis only — never auto-captures |
 | `kmind_capture_suggest` | read | **ADR-002 smart write:** duplicates / type retype / hub / links / anchors / quality; `proposedCapture` includes registry `guidance`/`scaffold`. Do not default `architecture_design`. Show to human; merge `apply` into capture on confirm. Does not write |
+| `kmind_capture_propose` | write | Stage `CaptureProposal` under `audit/proposals` (no knowledge write). Optional when `capture.twoPhase=true` |
+| `kmind_capture_commit` | write | Commit staged proposal by `proposalId` (same capture path; second commit fails) |
 | `kmind_capture` | write | Capture confirmed knowledge (prefer `kmind_capture_suggest` first; pass `title` + `type` + optional `anchors` / `related` / `links` / `bootstrapTask`). **Type** must be enabled in registry. **Quality gate** failure also returns `suggestions`. Success returns `coverage` + `claimCompleteAllowed`; optional `bootstrapMarked` when DigTask mark succeeds |
 | `kmind_retire_expired` | write | Retire expired cards: `list` / `deprecate` / `supersede` / `refresh` / `deprecate-all` (prefer `dryRun`). Closes `expired_asset` coverage gaps |
 | `kmind_graph_query` | sensitive | Cypher-like graph query |

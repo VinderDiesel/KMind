@@ -46,6 +46,11 @@ export {
   type MarkBootstrapProgressTaskResult,
 } from './mark-task.js';
 export {
+  findDigTask,
+  lookupDigTaskCandidateType,
+  resolveBootstrapCandidateType,
+} from './lookup-task.js';
+export {
   enrichSuggestedAnchors,
   extractExportNames,
 } from './anchors.js';

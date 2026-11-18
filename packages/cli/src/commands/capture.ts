@@ -6,15 +6,11 @@ import {
   attachProtocolToCoverage,
   BlobStore,
   createPipeline,
-  emptyBootstrapProgress,
-  hashBootstrapPlan,
-  buildBootstrapPlanForVault,
   inferCodeRootFromVault,
   isOverviewTitle,
-  loadBootstrapProgress,
-  saveBootstrapProgress,
+  markBootstrapProgressTask,
+  resolveBootstrapCandidateType,
   sanitizeTitle,
-  upsertProgressTask,
 } from '@kmind/core';
 import {
   AssetLinkSchema,
@@ -87,6 +83,16 @@ export async function cmdCapture(
   const related = parseRelatedOption(options.related);
   const links = parseLinksOption(options.links);
   const peers = await ctx.store.queryAssets({ project, limit: 200 });
+  const vaultConfig = await ctx.vault.getConfig();
+  const bootstrapTask = options.bootstrapTask?.trim();
+  const bootstrapCandidateType = bootstrapTask
+    ? await resolveBootstrapCandidateType(
+        ctx.vault,
+        ctx.store,
+        project,
+        bootstrapTask,
+      )
+    : undefined;
   const quality = assessCaptureQuality(content, type, {
     title,
     related,
@@ -96,6 +102,13 @@ export async function cmdCapture(
       .filter((a) => /总览|概览|索引|overview/i.test(a.title))
       .map((a) => a.id),
     typeDef,
+    strictTopic: vaultConfig.capture.strictTopic === true,
+    ...(bootstrapCandidateType
+      ? {
+          bootstrapCandidateType,
+          bootstrapTaskId: bootstrapTask,
+        }
+      : {}),
   });
   const gateReasons = [...quality.reasons];
   if (isOverviewTitle(title) && related && related.length > 0) {
@@ -162,32 +175,22 @@ export async function cmdCapture(
   );
 
   let bootstrapMarked: string | undefined;
-  const bootstrapTask = options.bootstrapTask?.trim();
   if (bootstrapTask && result.created > 0) {
     const newest = afterAssets
       .filter((a) => a.title === title)
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
     try {
-      const plan = await buildBootstrapPlanForVault(ctx.vault, ctx.store, {
+      await markBootstrapProgressTask({
+        vault: ctx.vault,
         project,
+        repoRoot: inferCodeRootFromVault(ctx.vault.root),
+        taskId: bootstrapTask,
+        status: 'done',
+        assetId: newest?.id,
       });
-      let progress =
-        (await loadBootstrapProgress(ctx.vault, project)) ??
-        emptyBootstrapProgress(
-          project,
-          inferCodeRootFromVault(ctx.vault.root),
-          hashBootstrapPlan(plan),
-        );
-      progress = upsertProgressTask(
-        progress,
-        bootstrapTask,
-        'done',
-        newest?.id,
-      );
-      await saveBootstrapProgress(ctx.vault, progress);
       bootstrapMarked = bootstrapTask;
     } catch {
-      /* mark is best-effort */
+      /* mark is best-effort — capture success stands */
     }
   }
 
@@ -210,12 +213,17 @@ export async function cmdCapture(
       protocolViolation: coverage.protocolViolation,
       recentRecall: coverage.recentRecall,
       ...(bootstrapMarked ? { bootstrapMarked } : {}),
+      ...(quality.hints.length ? { hints: quality.hints } : {}),
+      ...(bootstrapCandidateType
+        ? { bootstrapCandidateType }
+        : {}),
     },
     ctx.json,
   );
 }
 
-function parseLinksOption(raw?: string) {
+/** Parse `--links` JSON for capture / capture-propose. */
+export function parseLinksOption(raw?: string) {
   if (!raw?.trim()) return undefined;
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -231,7 +239,8 @@ function parseLinksOption(raw?: string) {
   }
 }
 
-function parseRelatedOption(raw?: string): string[] | undefined {
+/** Parse `--related` comma/space-separated asset ids. */
+export function parseRelatedOption(raw?: string): string[] | undefined {
   if (!raw?.trim()) return undefined;
   const ids = raw
     .split(/[,;\s]+/)
@@ -240,7 +249,8 @@ function parseRelatedOption(raw?: string): string[] | undefined {
   return ids.length > 0 ? [...new Set(ids)] : undefined;
 }
 
-function parseAnchorsOption(raw?: string) {
+/** Parse `--anchors` JSON array of CodeAnchor. */
+export function parseAnchorsOption(raw?: string) {
   if (!raw?.trim()) return undefined;
   try {
     const parsed = JSON.parse(raw) as unknown;

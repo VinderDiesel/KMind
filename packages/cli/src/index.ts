@@ -9,6 +9,10 @@ import { cmdSearch } from './commands/search.js';
 import { cmdPack } from './commands/pack.js';
 import { cmdSuggestCapture } from './commands/suggest-capture.js';
 import { cmdCapture } from './commands/capture.js';
+import {
+  cmdCaptureCommit,
+  cmdCapturePropose,
+} from './commands/capture-propose.js';
 import { cmdLint } from './commands/lint.js';
 import { cmdExport } from './commands/export.js';
 import { cmdImport } from './commands/import.js';
@@ -21,6 +25,8 @@ import { cmdUi } from './commands/ui.js';
 import { cmdPurgeSessions } from './commands/purge-sessions.js';
 import { cmdExpiry } from './commands/expiry.js';
 import { cmdCoverage } from './commands/coverage.js';
+import { cmdRecallStats } from './commands/recall-stats.js';
+import { cmdRecallFeedback } from './commands/recall-feedback.js';
 import {
   cmdBootstrapApplyTree,
   cmdBootstrapDelegate,
@@ -366,6 +372,51 @@ program
   });
 
 program
+  .command('capture-propose')
+  .description(
+    'ADR-002 stage capture proposal under audit/ (no knowledge write)',
+  )
+  .argument('<content>', 'Content to stage')
+  .option('--type <t>', 'Knowledge type')
+  .option('--title <title>', 'Title')
+  .requiredOption('--project <name>', 'Project')
+  .option(
+    '--anchors <json>',
+    'Code anchors JSON array, e.g. \'[{"file":"a.ts","symbol":"foo"}]\'',
+  )
+  .option('--related <ids>', 'Comma-separated related asset ids (k-YYYY-MM-DD-NNN)')
+  .option(
+    '--links <json>',
+    'Typed links JSON, e.g. \'[{"id":"k-…-001","relation":"solves"}]\'',
+  )
+  .option('--bootstrap-task <id>', 'DigTask id to mark on later commit')
+  .action(async (content, cmdOpts) => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await withVaultOrPrompt(opts);
+      await cmdCapturePropose(ctx, content, cmdOpts);
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+program
+  .command('capture-commit')
+  .description('ADR-002 commit a staged capture proposal by id')
+  .argument('<proposalId>', 'Proposal id from capture-propose')
+  .action(async (proposalId: string) => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await withVaultOrPrompt(opts);
+      await cmdCaptureCommit(ctx, proposalId);
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+program
   .command('purge-sessions')
   .description(
     'Remove session-derived knowledge assets (keep manual captures and raw/)',
@@ -428,28 +479,89 @@ program
     }
   });
 
+for (const name of ['coverage', 'quality'] as const) {
+  program
+    .command(name)
+    .description(
+      name === 'quality'
+        ? 'Three-dimension knowledge quality (coverage/content/diversity scores); same as coverage + quality block'
+        : 'Assess whether a project/topic is dug deep (not catalog-only). Do not claim complete unless complete=true',
+    )
+    .requiredOption('--project <name>', 'Project scope')
+    .option('--topic <t>', 'Topic filter (e.g. 问数)')
+    .option('--hub-id <id>', 'Overview asset id to score')
+    .action(async (cmdOpts) => {
+      const opts = program.opts<{ json?: boolean; vault?: string }>();
+      try {
+        const ctx = await withVaultOrPrompt(opts);
+        await cmdCoverage(ctx, {
+          project: cmdOpts.project,
+          topic: cmdOpts.topic,
+          hubId: cmdOpts.hubId,
+        });
+        ctx.store.close();
+      } catch (err) {
+        fail(err, opts.json);
+      }
+    });
+}
+
 program
-  .command('coverage')
+  .command('recall-stats')
   .description(
-    'Assess whether a project/topic is dug deep (not catalog-only). Do not claim complete unless complete=true',
+    'ADR-002 local recall stats from audit/search-queries (emptyRate, pack vs search)',
   )
-  .requiredOption('--project <name>', 'Project scope')
-  .option('--topic <t>', 'Topic filter (e.g. 问数)')
-  .option('--hub-id <id>', 'Overview asset id to score')
-  .action(async (cmdOpts) => {
+  .option('--project <name>', 'Optional project filter')
+  .option('--window-hours <n>', 'Lookback hours (1–168)', '24')
+  .action(async (cmdOpts: { project?: string; windowHours?: string }) => {
     const opts = program.opts<{ json?: boolean; vault?: string }>();
     try {
       const ctx = await withVaultOrPrompt(opts);
-      await cmdCoverage(ctx, {
+      await cmdRecallStats(ctx, {
         project: cmdOpts.project,
-        topic: cmdOpts.topic,
-        hubId: cmdOpts.hubId,
+        windowHours: Number(cmdOpts.windowHours),
       });
       ctx.store.close();
     } catch (err) {
       fail(err, opts.json);
     }
   });
+
+program
+  .command('recall-feedback')
+  .description(
+    'Record local pack/search usefulness feedback (audit JSONL only; never writes knowledge)',
+  )
+  .requiredOption('--useful <bool>', 'true|false')
+  .option('--focus-id <id>', 'Pack focus asset id')
+  .option('--query <q>', 'Original query string')
+  .option('--note <text>', 'Optional short note')
+  .action(
+    async (cmdOpts: {
+      useful: string;
+      focusId?: string;
+      query?: string;
+      note?: string;
+    }) => {
+      const opts = program.opts<{ json?: boolean; vault?: string }>();
+      const usefulRaw = String(cmdOpts.useful).trim().toLowerCase();
+      if (usefulRaw !== 'true' && usefulRaw !== 'false') {
+        fail(new Error('--useful must be true|false'), opts.json);
+      }
+      try {
+        const ctx = await withVaultOrPrompt(opts);
+        await cmdRecallFeedback(ctx, {
+          useful: usefulRaw === 'true',
+          focusId: cmdOpts.focusId,
+          query: cmdOpts.query,
+          note: cmdOpts.note,
+        });
+        ctx.store.close();
+      } catch (err) {
+        fail(err, opts.json);
+      }
+    },
+  );
 
 program
   .command('export')

@@ -81,12 +81,20 @@ export {
   type CoverageIssue,
   type CoverageOptions,
   type CoverageIssueCode,
+  type CoverageMetrics,
+  type CoverageBootstrapStats,
 } from './query/coverage.js';
 export {
   assessCoverageWithProtocol,
   attachProtocolToCoverage,
+  resolveBootstrapStats,
   type CoverageWithProtocol,
 } from './query/coverage-with-protocol.js';
+export {
+  buildKnowledgeQualityReport,
+  type KnowledgeQualityReport,
+  type QualityDimensionSlice,
+} from './query/quality-dimensions.js';
 export {
   buildProtocolReceipt,
   evaluateRecentRecall,
@@ -232,6 +240,9 @@ export {
   upsertProgressTask,
   emptyBootstrapProgress,
   markBootstrapProgressTask,
+  findDigTask,
+  lookupDigTaskCandidateType,
+  resolveBootstrapCandidateType,
   enrichSuggestedAnchors,
   extractExportNames,
   OllamaBootstrapLlm,
@@ -268,4 +279,15 @@ export {
   type SearchQueryLogHit,
   type SearchQueryLogKind,
 } from './observability/search-query-log.js';
+export { summarizeSearchQueryLogs } from './observability/recall-stats.js';
+export { appendRecallFeedback } from './observability/recall-feedback.js';
+export {
+  createCaptureProposal,
+  loadCaptureProposal,
+  commitCaptureProposal,
+  captureProposalsDir,
+  digestSuggestionIds,
+  type ManualCaptureDeps,
+  type CommitCaptureProposalResult,
+} from './compiler/capture-propose.js';
 export { traceLifecycle } from './observability/trace.js';

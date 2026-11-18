@@ -163,6 +163,43 @@ describe('assessCaptureQuality', () => {
     });
     expect(r.ok).toBe(true);
   });
+
+  it('given code title with protocol dump when assess then topic-drift hint', () => {
+    const body = `
+## 实现方式
+1. 在 \`packages/core/src/hello.ts\` 的 \`hello\` 导出中保持纯函数、无副作用，便于单测与 DigTask 锚定。
+2. 调用方通过 \`import { hello } from './hello.js'\` 使用；禁止平行复制实现。
+3. 整理后必须跑 kmind coverage；bootstrap 输出本身不等于 complete；FEATURE_TREE done 不等于图完整。
+4. capture-propose 只落提案，真正过闸在 capture-commit；二次 commit 同一 proposalId 应失败。
+
+\`\`\`ts
+export function hello(): number { return 1; }
+\`\`\`
+
+## 注意事项
+- 仅作为实现卡；协议词不应挤进同卡。
+- 空库 search 的 emptyRate 会偏高，属召回统计预期。
+- 失败时看 quality_gate.reasons，按锚点与挂图补齐后重试。
+
+## 红线规避
+- **禁止** project=global 或缺 project。
+- **禁止**宣称 complete 仅因 capture 成功或 search 命中。
+- **禁止**忽略 bootstrap DigTask 与类型对齐。
+- **禁止**把 coverage / bootstrap 协议说明塞进业务实现卡。
+`;
+    const soft = assessCaptureQuality(body, 'best_practice', {
+      title: 'hello 纯函数导出',
+    });
+    expect(soft.ok).toBe(true);
+    expect(soft.hints.some((h) => h.includes('主题漂移'))).toBe(true);
+
+    const hard = assessCaptureQuality(body, 'best_practice', {
+      title: 'hello 纯函数导出',
+      strictTopic: true,
+    });
+    expect(hard.ok).toBe(false);
+    expect(hard.reasons.some((r) => r.includes('主题漂移'))).toBe(true);
+  });
 });
 
 describe('scope helpers', () => {

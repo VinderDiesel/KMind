@@ -32,6 +32,16 @@ KMind 若只做本地 Markdown / SQLite 存储，与「文件夹 + 数据库」�
 | **类型偏斜** | coverage `type_mono`（明细≥4 且几乎全是 architecture、零非架构） | 拦「全架构骨架」假完工；催补有证据的 pitfall/tool/problem，不自动编造 |
 | **图健康** | health/lint（孤岛、浅卡、problem 未闭环、缺锚点等） | 结构是否可检索、可闭环 |
 
+#### 知识数据质量三维（Coverage 回执 `quality`）
+
+| 维度 | 机读字段 | 门禁/信号 |
+|------|----------|-----------|
+| **覆盖率** | `quality.coverage.score` + `metrics`（hub/detail/orphan）+ `bootstrap_done_without_hub` | 树 done ≠ 图完整；无总览时 medium 否决 complete |
+| **内容质量** | `quality.content.score`（gate 失败 / topic_drift / decision_noise） | capture 闸 + `strictTopic`；修复 `context.decision` 仅抽 Markdown 标题节 |
+| **种类丰富度** | `quality.diversity.score` + `typeHistogram` + `type_homogeneous` | 明细≥3 且单 type≥90% → medium；与 `type_mono` 并存 |
+
+CLI：`kmind coverage` / 别名 `kmind quality`（同一回执）。`complete` 仍只看高/中 issue，三维分数供 Agent 读数。
+
 **后做**：召回成功率埋点 / 人工打分（本地无云端反馈回路，成本高）。
 
 没有心跳，「进化」只是口号。
@@ -153,6 +163,12 @@ KMind 若只做本地 Markdown / SQLite 存储，与「文件夹 + 数据库」�
 4. capture 路径：可选返回 / 接受 `suggestions`；文档化回灌确认
 5. schedule：coverage + lint → 待办队列持久化（路径/格式另定）
 6. 更新 `docs/ARCHITECTURE.md`、`docs/MCP_TOOLS.md`、README 主张句
+
+## M6 飞轮硬化（落地）
+
+- **本地召回可证**：`kmind recall-stats` / `kmind_recall_stats` 汇总 `audit/search-queries/`；可选 `kmind_recall_feedback` 写 `audit/recall-feedback/`（从不改 knowledge）
+- **可选 propose/commit**：`capture.twoPhase` 默认 `false`；`kmind_capture_propose` → `kmind_capture_commit`（或 CLI `capture-propose` / `capture-commit`）；**不**强制拦截裸 `kmind_capture`
+- **仍不做**：云端召回埋点、联邦、用 LLM 把 Pack 总结成「答案」、自动灌正文
 
 ## 一句话
 

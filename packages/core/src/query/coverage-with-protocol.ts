@@ -1,4 +1,5 @@
 import type { KnowledgeAsset } from '@kmind/shared';
+import { loadBootstrapProgress } from '../bootstrap/progress.js';
 import { createCliCodegraphClient } from '../codegraph/cli-client.js';
 import { enrichCoverageSymbols } from '../codegraph/enrich-coverage.js';
 import type { CodegraphClient } from '../codegraph/types.js';
@@ -7,6 +8,7 @@ import type { SqliteStore } from '../storage/sqlite-store.js';
 import { inferCodeRootFromVault } from './anchor-fs.js';
 import {
   assessProjectCoverage,
+  type CoverageBootstrapStats,
   type CoverageOptions,
   type CoverageReport,
 } from './coverage.js';
@@ -15,12 +17,18 @@ import {
   type ProtocolViolation,
   type RecentRecall,
 } from './protocol-receipt.js';
+import {
+  buildKnowledgeQualityReport,
+  type KnowledgeQualityReport,
+} from './quality-dimensions.js';
 
 export type CoverageWithProtocol = CoverageReport & {
   protocolViolation: ProtocolViolation[];
   recentRecall: RecentRecall;
   claimCompleteAllowed: boolean;
   codegraphAvailable?: boolean | null;
+  /** Three-dimension quality scores (coverage / content / diversity). */
+  quality: KnowledgeQualityReport;
 };
 
 export interface CoverageProtocolExtras {
@@ -47,6 +55,7 @@ export async function assessCoverageWithProtocol(
     project,
     limit: 100_000,
   });
+  const bootstrap = await resolveBootstrapStats(vault, project);
   const report = assessProjectCoverage(assets, {
     project,
     topic: options.topic,
@@ -55,8 +64,25 @@ export async function assessCoverageWithProtocol(
     cwd: options.cwd ?? process.cwd(),
     ...(options.exists ? { exists: options.exists } : {}),
     ...(options.now ? { now: options.now } : {}),
+    ...(bootstrap ? { bootstrap } : {}),
   });
   return finalizeCoverageWithProtocol(vault, store, report, assets, options);
+}
+
+/**
+ * Map vault bootstrap progress into coverage bootstrap stats.
+ */
+export async function resolveBootstrapStats(
+  vault: Vault,
+  project: string,
+): Promise<CoverageBootstrapStats | undefined> {
+  const progress = await loadBootstrapProgress(vault, project);
+  if (!progress || progress.tasks.length === 0) return undefined;
+  const tasksDone = progress.tasks.filter((t) => t.status === 'done').length;
+  return {
+    tasksDone,
+    tasksTotal: progress.tasks.length,
+  };
 }
 
 /**
@@ -145,12 +171,15 @@ export async function finalizeCoverageWithProtocol(
     codegraphAvailable,
   });
 
+  const quality = buildKnowledgeQualityReport(working, projectAssets);
+
   return {
     ...working,
     protocolViolation: receipt.protocolViolation,
     recentRecall: receipt.recentRecall,
     claimCompleteAllowed: receipt.claimCompleteAllowed,
     codegraphAvailable,
+    quality,
   };
 }
 

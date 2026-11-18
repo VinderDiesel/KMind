@@ -96,7 +96,7 @@ export class HeuristicClassifier implements Classifier {
 
   async classify(candidate: RawCandidate): Promise<ClassificationResult> {
     const text = `${candidate.title}\n${candidate.content}`;
-    const context = buildContext(candidate, text);
+    const context = buildContext(candidate);
 
     if (candidate.typeHint) {
       return {
@@ -162,36 +162,56 @@ export class OllamaClassifier implements Classifier {
   }
 }
 
-function buildContext(
-  candidate: RawCandidate,
-  text: string,
-): DecisionTrajectory {
+const DECISION_SECTION_MAX = 800;
+
+function buildContext(candidate: RawCandidate): DecisionTrajectory {
   const hint = candidate.contextHint ?? {};
+  const body = candidate.content;
   return {
     problem:
       hint.problem?.trim() ||
-      extractSection(text, /problem|问题|背景/i) ||
+      extractHeadingSection(body, /^(problem|问题|背景)$/i) ||
       candidate.title,
     alternatives: hint.alternatives ?? [],
     decision:
       hint.decision?.trim() ||
-      extractSection(text, /decision|决策|方案/i) ||
-      truncate(candidate.content, 400),
+      extractHeadingSection(body, /^(实现方式|implementation)$/i) ||
+      extractHeadingSection(body, /^(decision|决策|方案)$/i) ||
+      truncate(body, 400),
     rationale:
       hint.rationale?.trim() ||
-      extractSection(text, /rationale|原因|why/i) ||
+      extractHeadingSection(body, /^(rationale|原因|why|权衡)$/i) ||
       'Captured from explicit manual input',
     tradeOffs: hint.tradeOffs ?? [],
     outcome: hint.outcome,
   };
 }
 
-function extractSection(text: string, heading: RegExp): string {
+/**
+ * Extract body under a Markdown ATX heading (H1–H3). Never matches inline bullets.
+ * Returns up to DECISION_SECTION_MAX chars of the section body.
+ */
+export function extractHeadingSection(
+  text: string,
+  titlePattern: RegExp,
+  maxChars = DECISION_SECTION_MAX,
+): string {
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
-    if (heading.test(lines[i] ?? '')) {
-      return (lines[i + 1] ?? '').trim();
+    const line = lines[i] ?? '';
+    const m = /^(#{1,3})\s+(.+?)\s*$/.exec(line);
+    if (!m) continue;
+    const title = (m[2] ?? '').trim();
+    if (!titlePattern.test(title)) continue;
+    const bodyLines: string[] = [];
+    for (let j = i + 1; j < lines.length; j++) {
+      const next = lines[j] ?? '';
+      if (/^#{1,3}\s+/.test(next)) break;
+      bodyLines.push(next);
     }
+    const body = bodyLines.join('\n').trim();
+    if (!body) return '';
+    return truncate(body, maxChars);
   }
   return '';
 }

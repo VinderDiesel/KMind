@@ -553,5 +553,6 @@ pnpm typecheck
 - [x] 团队项目 Vault + FEATURE_TREE + AGENTS 协议
 - [x] Bootstrap MVP + 深度升级：规则 / progress / delegate / 可选 LLM（ADR-004）
 - [x] Bootstrap M3 闭环：MCP `bootstrapTask` / evolution 跳转 / `recommendedNext` / init 规则模板
+- [x] 飞轮硬化 M6：本地 `recall-stats` / feedback；可选 propose/commit；CLI bootstrap mark DRY
+- [x] Coverage / 锚点生存期（ADR-003：`broken_anchor_symbol` + pack `anchorImpact`）
 - [ ] M4b：多实例联邦
-- [ ] Coverage / 锚点生存期深化（symbol survival、pack `anchorImpact` 等）

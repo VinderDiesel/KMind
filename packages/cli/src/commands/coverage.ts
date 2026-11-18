@@ -35,6 +35,13 @@ export async function cmdCoverage(
   process.stdout.write(
     `claimCompleteAllowed=${report.claimCompleteAllowed} recentRecall=${report.recentRecall.status}\n`,
   );
+  const q = report.quality;
+  process.stdout.write(
+    `quality: coverage=${q.coverage.score} content=${q.content.score} diversity=${q.diversity.score}\n`,
+  );
+  process.stdout.write(
+    `metrics: hubs=${q.coverage.metrics.hubCount} details=${q.coverage.metrics.detailCount} orphans=${q.coverage.metrics.orphanCount} types=${JSON.stringify(q.diversity.histogram)}\n`,
+  );
   if (report.protocolViolation.length) {
     process.stdout.write('\nProtocol violations:\n');
     for (const v of report.protocolViolation) {

@@ -38,7 +38,9 @@ export type CoverageIssueCode =
   | 'orphan_detail'
   | 'empty_outbound'
   | 'thin_topic'
-  | 'type_mono';
+  | 'type_mono'
+  | 'type_homogeneous'
+  | 'bootstrap_done_without_hub';
 
 /** Detail types that break an all-architecture mono cluster. */
 const NON_ARCHITECTURE_TYPES: ReadonlySet<KnowledgeType> = new Set([
@@ -54,6 +56,24 @@ const NON_ARCHITECTURE_TYPES: ReadonlySet<KnowledgeType> = new Set([
 
 const TYPE_MONO_MIN_DETAILS = 4;
 const TYPE_MONO_ARCH_RATIO = 0.85;
+const TYPE_HOMOGENEOUS_MIN_DETAILS = 3;
+const TYPE_HOMOGENEOUS_RATIO = 0.9;
+
+/** Structured coverage counters for three-dimension quality reporting. */
+export interface CoverageMetrics {
+  hubCount: number;
+  detailCount: number;
+  orphanCount: number;
+  shallowCount: number;
+  typeHistogram: Record<string, number>;
+  /**
+   * Done / total DigTasks from bootstrap progress when provided.
+   * Null when bootstrap stats were not supplied.
+   */
+  featureTreeDoneRatio: number | null;
+  bootstrapTasksDone: number | null;
+  bootstrapTasksTotal: number | null;
+}
 
 export interface CoverageIssue {
   code: CoverageIssueCode;
@@ -87,6 +107,12 @@ export interface CoverageReport {
   issues: CoverageIssue[];
   nextActions: string[];
   summary: string;
+  metrics: CoverageMetrics;
+}
+
+export interface CoverageBootstrapStats {
+  tasksDone: number;
+  tasksTotal: number;
 }
 
 export interface CoverageOptions {
@@ -106,6 +132,11 @@ export interface CoverageOptions {
   exists?: (absPath: string) => boolean;
   /** Clock for expiresAt (tests). */
   now?: Date;
+  /**
+   * DigTask progress for FEATURE_TREE / bootstrap alignment signals.
+   * When omitted, featureTreeDoneRatio stays null and bootstrap_done_without_hub is skipped.
+   */
+  bootstrap?: CoverageBootstrapStats;
 }
 
 /**
@@ -303,6 +334,34 @@ export function assessProjectCoverage(
     });
   }
 
+  const typeHistogram = buildTypeHistogram(details);
+  const dominant = dominantTypeShare(typeHistogram, details.length);
+  if (
+    details.length >= TYPE_HOMOGENEOUS_MIN_DETAILS &&
+    dominant &&
+    dominant.ratio >= TYPE_HOMOGENEOUS_RATIO
+  ) {
+    issues.push({
+      code: 'type_homogeneous',
+      severity: 'medium',
+      message: `种类同质：${details.length} 张明细中 ${dominant.type}=${dominant.count}（≥${Math.round(TYPE_HOMOGENEOUS_RATIO * 100)}%）— 按 DigTask/FEATURE_TREE 拆 architecture/pitfall/tool_usage/problem 等；禁止编造；勿用同质卡充数`,
+    });
+  }
+
+  const bootstrap = options.bootstrap;
+  if (
+    bootstrap &&
+    bootstrap.tasksDone > 0 &&
+    details.length > 0 &&
+    hubs.length === 0
+  ) {
+    issues.push({
+      code: 'bootstrap_done_without_hub',
+      severity: 'medium',
+      message: `Bootstrap DigTask 已有 ${bootstrap.tasksDone} 个 done，但无总览导航 — FEATURE_TREE done ≠ 知识图完整；先补薄总览并用 related 串联后再宣称整理完`,
+    });
+  }
+
   const brokenAnchors: CoverageCardBrief[] = [];
   const expired: CoverageCardBrief[] = [];
   for (const a of scoped) {
@@ -360,6 +419,22 @@ export function assessProjectCoverage(
     ? `覆盖合格：project=${project}${topic ? ` topic=${topic}` : ''}，${hubs.length} 总览 / ${details.length} 明细，无高/中问题`
     : `覆盖未完成：${blocking.length} 个高/中问题（共 ${issues.length}）。禁止对外宣称「知识已完整」——请按 nextActions 深挖，勿只刷新总览。`;
 
+  const featureTreeDoneRatio =
+    bootstrap && bootstrap.tasksTotal > 0
+      ? bootstrap.tasksDone / bootstrap.tasksTotal
+      : null;
+
+  const metrics: CoverageMetrics = {
+    hubCount: hubs.length,
+    detailCount: details.length,
+    orphanCount: orphans.length,
+    shallowCount: shallow.length,
+    typeHistogram,
+    featureTreeDoneRatio,
+    bootstrapTasksDone: bootstrap ? bootstrap.tasksDone : null,
+    bootstrapTasksTotal: bootstrap ? bootstrap.tasksTotal : null,
+  };
+
   return {
     project,
     ...(topic ? { topic } : {}),
@@ -379,6 +454,7 @@ export function assessProjectCoverage(
     issues,
     nextActions,
     summary,
+    metrics,
   };
 }
 
@@ -526,7 +602,10 @@ function buildNextActions(
   expired: CoverageCardBrief[],
 ): string[] {
   const actions: string[] = [];
-  if (issues.some((i) => i.code === 'no_hub')) {
+  if (
+    issues.some((i) => i.code === 'no_hub') ||
+    issues.some((i) => i.code === 'bootstrap_done_without_hub')
+  ) {
     actions.push('盘点模块清单 → 写明细卡 → 再建薄总览 related 串联');
   }
   if (issues.some((i) => i.code === 'duplicate_overview')) {
@@ -575,8 +654,40 @@ function buildNextActions(
       '类型偏斜 type_mono：有证据则 capture 至少 1 张非架构卡（pitfall/tool_usage/problem…）；无证据则勿宣称 complete、禁止编造；勿再堆 architecture_design',
     );
   }
+  if (issues.some((i) => i.code === 'type_homogeneous')) {
+    actions.push(
+      '种类同质 type_homogeneous：按 DigTask/FEATURE_TREE 拆多种 type（architecture/pitfall/tool…）；有证据才写，禁止编造同质卡充数',
+    );
+  }
   if (actions.length === 0 && hubs.length > 0) {
     actions.push('覆盖已合格：增量写入时仍须 search → 深挖 → capture → kmind_coverage 验收');
   }
   return actions;
+}
+
+function buildTypeHistogram(
+  details: KnowledgeAsset[],
+): Record<string, number> {
+  const hist: Record<string, number> = {};
+  for (const d of details) {
+    hist[d.type] = (hist[d.type] ?? 0) + 1;
+  }
+  return hist;
+}
+
+function dominantTypeShare(
+  histogram: Record<string, number>,
+  detailCount: number,
+): { type: string; count: number; ratio: number } | null {
+  if (detailCount <= 0) return null;
+  let best: { type: string; count: number } | null = null;
+  for (const [type, count] of Object.entries(histogram)) {
+    if (!best || count > best.count) best = { type, count };
+  }
+  if (!best) return null;
+  return {
+    type: best.type,
+    count: best.count,
+    ratio: best.count / detailCount,
+  };
 }
