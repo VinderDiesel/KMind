@@ -1,9 +1,15 @@
 import { z } from 'zod';
+import { LlmConfigSchema } from './llm.schema.js';
 
 export const KMindConfigSchema = z.object({
   version: z.string(),
   vaultPath: z.string(),
   defaultProject: z.string().default('global'),
+  /**
+   * ADR-005: LLM provider used by `kmind llm` and `kmind bootstrap run --write`.
+   * API keys live in env vars (only `apiKeyEnv` is persisted).
+   */
+  llm: LlmConfigSchema.default({}),
   embedding: z
     .object({
       enabled: z.boolean().default(true),
@@ -128,7 +134,7 @@ export const KMindConfigSchema = z.object({
     .default({}),
   /**
    * ADR-004 knowledge-init bootstrap (deterministic × optional local LLM).
-   * Never auto-captures knowledge bodies.
+   * ADR-005 adds opt-in body writing via `kmind bootstrap run --write`.
    */
   bootstrap: z
     .object({

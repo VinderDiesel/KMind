@@ -1,5 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { filePathMatches, symbolNameMatches } from './cli-client.js';
+import {
+  buildSymbolQueries,
+  filePathMatches,
+  symbolNameMatches,
+} from './cli-client.js';
+
+describe('buildSymbolQueries', () => {
+  it('given java file when build then qualified query comes first', () => {
+    expect(buildSymbolQueries('resolve', 'a/b/AskAgentRouter.java')).toEqual([
+      'AskAgentRouter.resolve',
+      'resolve',
+    ]);
+  });
+
+  it('given no file when build then bare symbol only', () => {
+    expect(buildSymbolQueries('resolve')).toEqual(['resolve']);
+  });
+
+  it('given file stem equal to symbol when build then dedupes', () => {
+    expect(buildSymbolQueries('resolve', 'lib/resolve.ts')).toEqual(['resolve']);
+  });
+});
 
 describe('symbolNameMatches', () => {
   it('given exact name when match then true', () => {

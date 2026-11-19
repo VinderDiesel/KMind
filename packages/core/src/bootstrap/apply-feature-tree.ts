@@ -22,10 +22,15 @@ export function applyBootstrapPlanToFeatureTree(
   const end = existingMarkdown.indexOf(BOOTSTRAP_TREE_END);
 
   if (start !== -1 && end !== -1 && end > start) {
+    const previousSection = existingMarkdown.slice(
+      start,
+      end + BOOTSTRAP_TREE_END.length,
+    );
     const before = existingMarkdown.slice(0, start);
     const after = existingMarkdown.slice(end + BOOTSTRAP_TREE_END.length);
     const next = `${before}${section}${trimLeadingNewlines(after)}`;
-    if (collapseWs(next) === collapseWs(existingMarkdown)) {
+    // generatedAt changes on every run; ignore it so apply-tree stays idempotent.
+    if (comparableSection(section) === comparableSection(previousSection)) {
       return { next: existingMarkdown, action: 'unchanged', rowsWritten: countTasks(plan) };
     }
     return {
@@ -92,4 +97,9 @@ function trimLeadingNewlines(s: string): string {
 
 function collapseWs(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
+}
+
+/** Whitespace-insensitive view that drops the per-run generatedAt stamp. */
+function comparableSection(s: string): string {
+  return collapseWs(s.replace(/generated:\s*[^\s|·]+/g, 'generated:'));
 }

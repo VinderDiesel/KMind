@@ -47,6 +47,39 @@ describe('selectModules', () => {
     expect(excluded.some((m) => m.path.includes('node_modules'))).toBe(true);
     expect(selected.every((m) => m.reason === 'selected')).toBe(true);
   });
+
+  it('given oversized java main when select then splits by package', async () => {
+    const root = await makeRepo({
+      'src/main/java/com/acme/app/service/agent/AskAgentRouter.java':
+        'class AskAgentRouter {}\n',
+      'src/main/java/com/acme/app/service/query/AskQueryService.java':
+        'class AskQueryService {}\n',
+      'src/main/java/com/acme/app/metricgraph/MetricGraphBuilder.java':
+        'class MetricGraphBuilder {}\n',
+    });
+
+    const { selected } = await selectModules({
+      repoRoot: root,
+      refineThreshold: 2,
+    });
+    const paths = selected.map((m) => m.path);
+
+    expect(paths).toHaveLength(3);
+    expect(paths.some((p) => p.endsWith('service/agent'))).toBe(true);
+    expect(paths.some((p) => p.endsWith('service/query'))).toBe(true);
+    expect(paths.some((p) => p.endsWith('metricgraph'))).toBe(true);
+  });
+
+  it('given small java main when select then keeps the module intact', async () => {
+    const root = await makeRepo({
+      'src/main/java/com/acme/app/service/AskService.java':
+        'class AskService {}\n',
+    });
+
+    const { selected } = await selectModules({ repoRoot: root });
+
+    expect(selected.map((m) => m.path)).toEqual(['src/main']);
+  });
 });
 
 describe('matchCandidateType', () => {
@@ -66,6 +99,13 @@ describe('matchCandidateType', () => {
 describe('groupLabel', () => {
   it('given packages path when label then packages/name', () => {
     expect(groupLabel('packages/core/src/storage')).toBe('packages/core');
+  });
+
+  it('given deep java src path when label then trailing functional segments', () => {
+    expect(groupLabel('src/main/java/com/acme/app/service/agent')).toBe(
+      'service/agent',
+    );
+    expect(groupLabel('src/main')).toBe('src/main');
   });
 });
 

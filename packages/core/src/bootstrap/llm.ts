@@ -129,7 +129,7 @@ export function modulesFromLlmGroups(
   return byLabel;
 }
 
-function parseGroupJson(
+export function parseGroupJson(
   text: string,
   moduleCount: number,
 ): LlmGroupResult[] | null {

@@ -137,7 +137,11 @@ export function groupLabel(modulePath: string): string {
     return `cmd/${parts[1]}`;
   }
   if (parts[0] === 'src') {
-    return 'src';
+    if (parts.length <= 2) return parts.join('/');
+    // Deep Java/TS layout (`src/main/java/com/acme/app/service`): bucket by the
+    // trailing functional segments so a 4k-file `src/main` does not collapse
+    // into a single DigGroup.
+    return parts.slice(-2).join('/');
   }
   if (modulePath === '.' || parts.length === 0) {
     return 'root';

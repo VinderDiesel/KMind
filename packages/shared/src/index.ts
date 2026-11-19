@@ -4,6 +4,7 @@ export * from './schemas/context-pack.schema.js';
 export * from './schemas/capture-suggestion.schema.js';
 export * from './schemas/evolution-queue.schema.js';
 export * from './schemas/bootstrap.schema.js';
+export * from './schemas/llm.schema.js';
 export * from './schemas/recall-stats.schema.js';
 export * from './schemas/recall-feedback.schema.js';
 export * from './schemas/capture-proposal.schema.js';

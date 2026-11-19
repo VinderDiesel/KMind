@@ -1,5 +1,7 @@
 export {
   selectModules,
+  isJavaMainModule,
+  DEFAULT_REFINE_THRESHOLD,
   type SelectModulesOptions,
   type SelectModulesResult,
 } from './select.js';
@@ -57,11 +59,16 @@ export {
 export {
   OllamaBootstrapLlm,
   modulesFromLlmGroups,
+  parseGroupJson,
   type BootstrapLlmClient,
   type LlmGroupResult,
   type ModuleGroupMeta,
   type OllamaBootstrapLlmOptions,
 } from './llm.js';
+export {
+  ProviderBootstrapLlm,
+  createBootstrapLlmFromConfig,
+} from './provider-llm.js';
 export {
   buildDigPacket,
   resolveDigGroup,

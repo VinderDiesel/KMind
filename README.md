@@ -208,13 +208,84 @@ git commit -m "chore: add team KMind project vault"
 
 ## 知识初始化 Bootstrap
 
-面向「整理某系统 / 全项目首次盘点」。工程负责清单，Agent 负责深挖；**Bootstrap / DigPacket ≠ complete**。
+面向「整理某系统 / 全项目首次盘点」。工程负责清单；默认不写正文，Agent 深挖；**Bootstrap / DigPacket ≠ complete**。
 
 ```text
-preview → apply-tree（可选）→ 按组 delegate → dig + capture → mark → coverage
+默认：preview → apply-tree（可选）→ 按组 delegate → dig + capture → mark → coverage
+CLI 一体化（ADR-005）：llm set → llm test → bootstrap run --write → coverage
 ```
 
+### 1. 配置 provider / model（ADR-005）
+
 ```bash
+# 写入 vault config.yaml（只存 apiKeyEnv 变量名，密钥永不落盘）
+kmind llm set --provider openai --model gpt-4o-mini
+kmind llm set --provider anthropic --model claude-sonnet-4-5 --api-key-env ANTHROPIC_API_KEY
+kmind llm set --provider ollama --model qwen2.5-coder:14b
+kmind llm set --provider azure-openai \
+  --base-url https://<resource>.openai.azure.com --azure-deployment gpt-4o --model gpt-4o
+
+# 自定义 OpenAI 格式网关（DeepSeek / Qwen / vLLM / LiteLLM / OneAPI / LM Studio …）
+kmind llm set --provider openai-compatible \
+  --base-url https://gateway.example.com/v1 --model deepseek-chat --api-key-env GATEWAY_KEY
+# 本地免鉴权网关：不设 key 也能用；base-url 也可直接写完整 …/chat/completions
+kmind llm set --provider openai-compatible --base-url http://127.0.0.1:8000/v1 --model qwen2.5-72b
+
+# 交互式配置（同 `ocr config provider/model`）：↑/↓ 选择，Enter 确认，Esc 取消
+kmind llm provider   # provider → base URL → key 环境变量名 → json 模式 → 是否接着选 model
+kmind llm model      # 拉取端点模型列表，失败自动回退为手输
+kmind llm set        # 无参数 + TTY 时等价于 llm provider 引导流程
+
+# 查看生效配置（含 key 环境变量是否存在）与连通性探活
+export OPENAI_API_KEY=sk-...        # 或 KMIND_LLM_API_KEY / ANTHROPIC_API_KEY / AZURE_OPENAI_API_KEY
+kmind llm status
+kmind llm test
+
+# 一次性覆盖，不落盘
+kmind llm status --provider openai --model gpt-4o
+kmind llm test --provider openai-compatible --base-url https://gateway/v1 --model deepseek-chat
+```
+
+| 配置键 | 说明 |
+|:---|:---|
+| `llm.provider` | `ollama` / `openai`（OpenAI 官方）/ `openai-compatible`（自定义 OpenAI 格式网关：DeepSeek/Qwen/vLLM/LiteLLM/LM Studio…）/ `anthropic` / `azure-openai` |
+| `llm.model` | 空 = 未配置，`bootstrap run --write` 会直接报错 |
+| `llm.baseUrl` | 空则用 provider 默认；**`openai-compatible` 与 `azure-openai` 必填**，支持 `<base>/v1` 或完整 `…/chat/completions` |
+| `llm.apiKeyEnv` | 密钥环境变量名（默认 `KMIND_LLM_API_KEY`）；**不存密钥**；`ollama` / `openai-compatible` 可免 key |
+| `llm.jsonMode` | 是否发送 `response_format: json_object`（默认 `true`）；网关不支持时 `--json-mode false` |
+| `llm.maxInputChars` | 每个 DigTask 的证据字符预算（默认 24000） |
+
+交互式向导仅在 TTY 下可用；非 TTY 或 `--json` 会直接报错并提示改用 `kmind llm set --provider/--model`。
+
+### 2. 一键扫描并写入知识库
+
+```bash
+# 演练：LLM 扫描 + 质量闸门，不写盘不 mark
+kmind bootstrap run --project my-app --repo . --dry-run --max-tasks 3
+
+# 正式写入：DigPlan → 证据扫描 → LLM 写卡 → 质量闸门 → 入库 → 总览 → coverage
+kmind bootstrap run --project my-app --repo . --write
+
+# 分批 / 单组 / 参数调优
+kmind bootstrap run --project my-app --repo . --write --group packages/core --max-tasks 5
+kmind bootstrap run --project my-app --repo . --write --max-cards 2 --min-confidence 0.6
+kmind bootstrap run --project my-app --repo . --write --provider openai --model gpt-4o-mini
+kmind bootstrap run --project my-app --repo . --write --no-repair
+# 指向自建/第三方 OpenAI 格式网关
+kmind bootstrap run --project my-app --repo . --write \
+  --provider openai-compatible --base-url https://gateway/v1 --model deepseek-chat
+```
+
+写入规则：LLM 卡片先过 Zod 与锚点限定，再走与 `kmind capture` **同一质量闸门**；失败时做一次 repair，仍失败则跳过并在报告中列出 `reasons`。低置信卡（默认 `<0.55`）不写入。收尾会生成确定性总览 hub（`related` = 全部明细），满足 graph/coverage 的 hub 要求。
+
+### 3. 人工/Agent 深挖模式（默认）
+
+```bash
+# 一键幂等初始化：补齐 vault 文件 → reindex → 出题单 → 写 FEATURE_TREE → coverage 摘要
+kmind bootstrap run --project my-app --repo .
+kmind bootstrap run --project my-app --repo . --json      # 全部 nextCommands
+kmind bootstrap run --project my-app --repo . --no-tree   # 只出计划不动树
+
 # 预览 DigGroup / DigTask（只读）
 kmind bootstrap preview --project my-app --repo .
 
@@ -239,11 +310,12 @@ kmind capture "…" --type architecture_design --bootstrap-task dig-…
 | 规则 overlay | vault `bootstrap-rules.yaml`（`init --project` 幂等模板；不存在则内置启发式；first-match） |
 | 进度 | `audit/bootstrap-progress.json`（勿提交 git） |
 | 锚点 | 路径级 + 可选 Codegraph 导出符号；不持久化 callers |
-| 可选 LLM | `config.yaml` 中 `bootstrap.llmGrouping` / `llmPlan`（默认关；本地 Ollama 风格，失败回退） |
+| 可选 LLM | 顶层 `llm` 配置（ADR-005）：四 provider、`kmind llm status/set/test`；`bootstrap run --write` 端到端写入 |
+| 旧配置兼容 | `llm.model` 为空时回退 `bootstrap.llm`（provider=ollama） |
 | Evolution | `todo` DigTask → 队列 `source=bootstrap`（含 `digTaskId` / `groupLabel`） |
 | Delegate 列表 | 返回 `recommendedNext` + `stats`；MCP `kmind_capture.bootstrapTask` 成功后自动 mark |
 
-MCP：`kmind_bootstrap_preview` / `status` / `mark` / `delegate`；capture 可带 `bootstrapTask`。细则：[ADR-004](docs/adr/004-knowledge-bootstrap-hybrid.md) M3、Skill `kmind-capture` Delegate 模式。
+MCP：`kmind_bootstrap_preview` / `status` / `mark` / `delegate`；capture 可带 `bootstrapTask`。细则：[ADR-004](docs/adr/004-knowledge-bootstrap-hybrid.md) M3、[ADR-005](docs/adr/005-cli-llm-knowledge-build.md)、Skill `kmind-capture` Delegate 模式。
 
 ---
 
@@ -253,7 +325,7 @@ MCP：`kmind_bootstrap_preview` / `status` / `mark` / `delegate`；capture 可�
 |:---|:---|
 | **写代码前** | `kmind_pack` / `kmind_search`（防重复造轮子 / 重复建表） |
 | **定案后** | `kmind_capture_suggest` → 人确认 → `kmind_capture`（用户不必说「记一下」） |
-| **首次整理系统** | bootstrap preview → 按组 delegate → 深挖 capture → mark → **coverage** |
+| **首次整理系统** | `bootstrap run --write`（CLI 一体化，ADR-005）；或 bootstrap preview → 按组 delegate → 深挖 capture → mark → **coverage** |
 | **查代码结构** | Codegraph（`codegraph_explore`）；决策/踩坑仍走 KMind（ADR-003） |
 
 Skills：`kmind-capture`、`kmind-code-bridge`（仓库 `skills/`；`adapters install` / `skills install` 分发）。
@@ -317,7 +389,8 @@ kmind evolution status
 |:---|:---|
 | `kmind init` | 初始化 Vault；`--project` 建仓内 vault |
 | `kmind feature-tree` | `FEATURE_TREE.md` 确保 / 维护 |
-| `kmind bootstrap …` | 知识初始化：`preview` / `apply-tree` / `sync-tree` / `status` / `mark` / `delegate` |
+| `kmind bootstrap …` | 知识初始化：`run`（一键幂等，`--write` 端到端写入）/ `preview` / `apply-tree` / `sync-tree` / `status` / `mark` / `delegate` |
+| `kmind llm …` | LLM 配置：`status` / `set` / `test`（密钥只从环境变量读取） |
 | `kmind compile` | 将 raw 会话编译为知识资产（仍受 Session 双闸门约束） |
 | `kmind search <query>` | 混合检索（精确 id 可直接命中） |
 | `kmind pack [query] --id <id>` | Context Pack（主卡+邻域+锚点） |

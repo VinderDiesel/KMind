@@ -291,3 +291,7 @@ export {
   type CommitCaptureProposalResult,
 } from './compiler/capture-propose.js';
 export { traceLifecycle } from './observability/trace.js';
+
+// ADR-005: LLM providers + evidence-grounded knowledge build.
+export * from './llm/index.js';
+export * from './knowledge-build/index.js';

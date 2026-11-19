@@ -37,7 +37,9 @@ Never commit: `raw/`, `index.db`, `audit/`, `diagnostics/`. Sync rides normal `g
 - `query` — fulltext / structured / graph / semantic / hybrid / ego / **context-pack** (`kmind_pack`)
 - `health` — lint rules
 - `schedule` / **evolution-queue** — cron maintenance + ADR-002 coverage/lint todo queue (`audit/evolution-queue.json`)
-- `bootstrap` — **ADR-004** knowledge-init (`select` → `group` → types → plan; optional local LLM grouping/planNotes; DigPacket delegate; progress in `audit/`). CLI: `preview|apply-tree|sync-tree|status|mark|delegate`. MCP: `kmind_bootstrap_*`. Never auto-captures bodies. See [ADR-004](adr/004-knowledge-bootstrap-hybrid.md).
+- `bootstrap` — **ADR-004** knowledge-init (`select` → `group` → types → plan; optional LLM grouping/planNotes; DigPacket delegate; progress in `audit/`). CLI: `preview|apply-tree|sync-tree|status|mark|delegate`. MCP: `kmind_bootstrap_*`. Never auto-captures bodies. See [ADR-004](adr/004-knowledge-bootstrap-hybrid.md).
+- `llm` — **ADR-005** provider abstraction (`ollama|openai|openai-compatible|anthropic|azure-openai`): `resolve` (config + overrides + env key lookup, never persists keys), `client` (endpoint/headers/body per provider, custom OpenAI-format gateways via `baseUrl`, `KMindError(ADAPTER_ERROR)`), `describeLlmConfig` for `kmind llm status`. Bootstrap planning reuses it via `ProviderBootstrapLlm`.
+- `knowledge-build` — **ADR-005** end-to-end body writing used only by `kmind bootstrap run --write` / `--dry-run`: bounded evidence `scanner` → JSON `prompts` → Zod `parse` (anchors constrained to evidence) → `digger` → per-card `capture` (same `assessCaptureQuality` gate + one repair) → `pipeline` (progress mark, deterministic hub, report). See [ADR-005](adr/005-cli-llm-knowledge-build.md).
 - `observability` — MCP tool audit (`audit/YYYY-MM-DD.jsonl`) + **search/pack query logs** (`audit/search-queries/YYYY-MM-DD.jsonl`, every CLI/MCP/UI recall; not committed)
 - `migration` — export / import
 

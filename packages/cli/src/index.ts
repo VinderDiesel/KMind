@@ -32,9 +32,20 @@ import {
   cmdBootstrapDelegate,
   cmdBootstrapMark,
   cmdBootstrapPreview,
+  cmdBootstrapRun,
   cmdBootstrapStatus,
   cmdBootstrapSyncTree,
 } from './commands/bootstrap.js';
+import {
+  cmdLlmSet,
+  cmdLlmStatus,
+  cmdLlmTest,
+  llmOverridesFromFlags,
+} from './commands/llm.js';
+import {
+  cmdLlmModelInteractive,
+  cmdLlmProviderInteractive,
+} from './commands/llm-interactive.js';
 import {
   cmdScheduleList,
   cmdScheduleRun,
@@ -111,7 +122,75 @@ featureTreeCmd
 const bootstrapCmd = program
   .command('bootstrap')
   .description(
-    'ADR-004 knowledge-init plan: deterministic module select/group/type hints (no auto-capture)',
+    'Knowledge-init: deterministic plan by default (ADR-004); --write runs LLM dig + capture (ADR-005)',
+  );
+
+bootstrapCmd
+  .command('run')
+  .description(
+    'One-shot init: vault files → reindex → plan → FEATURE_TREE → coverage；--write 额外执行 LLM 扫描、质量闸门与写入知识库',
+  )
+  .requiredOption('--project <name>', 'Project name (required, not global)')
+  .option('--repo <path>', 'Code repo root (default: vault code root)')
+  .option('--no-tree', 'Skip writing FEATURE_TREE bootstrap rows')
+  .option('--no-reindex', 'Skip rebuilding the sqlite index')
+  .option('--topic <t>', 'Topic filter for the coverage summary')
+  .option('--write', 'ADR-005: LLM dig + quality gate + capture knowledge bodies', false)
+  .option('--dry-run', 'Dig and quality-check with the LLM, but write nothing', false)
+  .option('--group <label>', 'Only dig this DigGroup label')
+  .option('--max-tasks <n>', 'Cap tasks in this run')
+  .option('--max-cards <n>', 'Cards requested per task (1-4, default 2)')
+  .option('--min-confidence <n>', 'Skip cards below this confidence (0-1, default 0.55)')
+  .option('--no-repair', 'Disable the one-shot LLM repair attempt')
+  .option('--provider <p>', 'LLM provider: ollama | openai | openai-compatible | anthropic | azure-openai')
+  .option('--model <m>', 'LLM model id (overrides config)')
+  .option('--base-url <url>', 'Custom OpenAI-format endpoint, e.g. https://gateway/v1 (overrides config)')
+  .option('--api-key-env <name>', 'Env var holding the API key (never persisted)')
+  .action(
+    async (cmdOpts: {
+      project: string;
+      repo?: string;
+      tree?: boolean;
+      reindex?: boolean;
+      topic?: string;
+      write?: boolean;
+      dryRun?: boolean;
+      group?: string;
+      maxTasks?: string;
+      maxCards?: string;
+      minConfidence?: string;
+      repair?: boolean;
+      provider?: string;
+      model?: string;
+      baseUrl?: string;
+      apiKeyEnv?: string;
+    }) => {
+      const opts = program.opts<{ json?: boolean; vault?: string }>();
+      try {
+        const ctx = await withVaultOrPrompt(opts);
+        await cmdBootstrapRun(ctx, {
+          project: cmdOpts.project,
+          repo: cmdOpts.repo,
+          tree: cmdOpts.tree,
+          reindex: cmdOpts.reindex,
+          topic: cmdOpts.topic,
+          write: cmdOpts.write,
+          dryRun: cmdOpts.dryRun,
+          group: cmdOpts.group,
+          maxTasks: toNumeric(cmdOpts.maxTasks),
+          maxCardsPerTask: toNumeric(cmdOpts.maxCards),
+          minConfidence: toNumeric(cmdOpts.minConfidence),
+          repair: cmdOpts.repair,
+          provider: cmdOpts.provider,
+          model: cmdOpts.model,
+          baseUrl: cmdOpts.baseUrl,
+          apiKeyEnv: cmdOpts.apiKeyEnv,
+        });
+        ctx.store.close();
+      } catch (err) {
+        fail(err, opts.json);
+      }
+    },
   );
 
 bootstrapCmd
@@ -947,6 +1026,148 @@ skills
     }
   });
 
+const llmCmd = program
+  .command('llm')
+  .description(
+    'LLM provider/model config for agentic knowledge build (API keys stay in env vars)',
+  );
+llmCmd
+  .command('status')
+  .description(
+    'Show effective provider/model/baseUrl and whether the API key env is present',
+  )
+  .option('--provider <p>', 'Override provider for this call')
+  .option('--model <m>', 'Override model for this call')
+  .option('--base-url <url>', 'Override base URL for this call')
+  .option('--api-key-env <name>', 'Override key env var name for this call')
+  .option('--json-mode <bool>', 'Override response_format json mode for this call')
+  .action(
+    async (cmdOpts: {
+      provider?: string;
+      model?: string;
+      baseUrl?: string;
+      apiKeyEnv?: string;
+      jsonMode?: string;
+    }) => {
+      const opts = program.opts<{ json?: boolean; vault?: string }>();
+      try {
+        const ctx = await withVaultOrPrompt(opts);
+        await cmdLlmStatus(ctx, llmOverridesFromFlags(cmdOpts));
+        ctx.store.close();
+      } catch (err) {
+        fail(err, opts.json);
+      }
+    },
+  );
+
+llmCmd
+  .command('set')
+  .description(
+    'Persist provider/model settings to vault config.yaml (no flags + TTY → interactive wizard)',
+  )
+  .option('--provider <p>', 'ollama | openai | openai-compatible | anthropic | azure-openai')
+  .option('--model <m>', 'Model id, e.g. gpt-4o-mini / claude-sonnet-4-5 / qwen2.5-coder:14b')
+  .option(
+    '--base-url <url>',
+    'Custom OpenAI-format endpoint (required for openai-compatible), e.g. https://gateway/v1',
+  )
+  .option('--api-key-env <name>', 'Env var name holding the key (default KMIND_LLM_API_KEY)')
+  .option('--azure-api-version <v>', 'Azure OpenAI api-version')
+  .option('--azure-deployment <name>', 'Azure OpenAI deployment name')
+  .option('--json-mode <bool>', 'Send response_format=json_object (true|false, default true)')
+  .option('--temperature <n>', 'Sampling temperature 0-2')
+  .option('--max-tokens <n>', 'Max output tokens')
+  .option('--timeout-ms <n>', 'Request timeout in ms')
+  .option('--max-input-chars <n>', 'Evidence budget per dig task')
+  .action(
+    async (cmdOpts: {
+      provider?: string;
+      model?: string;
+      baseUrl?: string;
+      apiKeyEnv?: string;
+      azureApiVersion?: string;
+      azureDeployment?: string;
+      jsonMode?: string;
+      temperature?: string;
+      maxTokens?: string;
+      timeoutMs?: string;
+      maxInputChars?: string;
+    }) => {
+      const opts = program.opts<{ json?: boolean; vault?: string }>();
+      try {
+        const ctx = await withVaultOrPrompt(opts);
+        await cmdLlmSet(ctx, cmdOpts);
+        ctx.store.close();
+      } catch (err) {
+        fail(err, opts.json);
+      }
+    },
+  );
+
+llmCmd
+  .command('provider')
+  .description(
+    'Interactive provider setup: pick provider, base URL and key env (like `ocr config provider`)',
+  )
+  .action(async () => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await withVaultOrPrompt(opts);
+      await cmdLlmProviderInteractive(ctx);
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+llmCmd
+  .command('model')
+  .description(
+    'Interactive model picker: lists models from the endpoint then saves the choice',
+  )
+  .action(async () => {
+    const opts = program.opts<{ json?: boolean; vault?: string }>();
+    try {
+      const ctx = await withVaultOrPrompt(opts);
+      await cmdLlmModelInteractive(ctx);
+      ctx.store.close();
+    } catch (err) {
+      fail(err, opts.json);
+    }
+  });
+
+llmCmd
+  .command('test')
+  .description('One minimal chat round-trip to verify provider/model/key')
+  .option('--prompt <text>', 'Custom probe prompt')
+  .option('--provider <p>', 'Override provider for this call')
+  .option('--model <m>', 'Override model for this call')
+  .option('--base-url <url>', 'Override base URL for this call')
+  .option('--api-key-env <name>', 'Override key env var name for this call')
+  .option('--json-mode <bool>', 'Override response_format json mode for this call')
+  .action(
+    async (cmdOpts: {
+      prompt?: string;
+      provider?: string;
+      model?: string;
+      baseUrl?: string;
+      apiKeyEnv?: string;
+      jsonMode?: string;
+    }) => {
+      const opts = program.opts<{ json?: boolean; vault?: string }>();
+      try {
+        const ctx = await withVaultOrPrompt(opts);
+        await cmdLlmTest(ctx, {
+          prompt: cmdOpts.prompt,
+          overrides: llmOverridesFromFlags(cmdOpts),
+        });
+        ctx.store.close();
+      } catch (err) {
+        fail(err, opts.json);
+      }
+    },
+  );
+
 program
   .command('hook')
   .description('Lifecycle hook entrypoint')
@@ -961,6 +1182,12 @@ program
       fail(err, opts.json);
     }
   });
+
+function toNumeric(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw.trim() === '') return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : Number.NaN;
+}
 
 async function withVaultOrPrompt(opts: {
   json?: boolean;

@@ -1,6 +1,6 @@
 # ADR-004: 知识初始化混合架构（确定性工程 × Agent）
 
-- **状态**：Accepted（MVP + M2 深度升级 + **M3 闭环**：MCP mark 对齐 / evolution 结构化跳转 / delegate recommendedNext / init 规则模板）
+- **状态**：Accepted（MVP + M2 深度升级 + **M3 闭环**：MCP mark 对齐 / evolution 结构化跳转 / delegate recommendedNext / init 规则模板）；正文写入边界由 [ADR-005](005-cli-llm-knowledge-build.md) 显式 opt-in 扩展
 - **日期**：2026-11-18
 - **决策者**：OCR 启发 + 产品共识（C + MVP → 1+2+3 → M3）
 - **关联**：[ADR-002 智能飞轮](002-intelligence-flywheel.md)、[ADR-003 双图边界](003-dual-graph-boundary.md)
@@ -26,7 +26,8 @@ OCR（alibaba/open-code-review）的混合架构表明：文件筛选、分组�
 ### 2. 契约表面
 
 Zod：`BootstrapModule` / `DigTask` / `DigGroup` / `BootstrapPlan` / `BootstrapDigPacket` / progress（`packages/shared`）。  
-CLI：`kmind bootstrap preview|apply-tree|sync-tree|status|mark|delegate`。  
+CLI：`kmind bootstrap run|preview|apply-tree|sync-tree|status|mark|delegate`。
+`run` = 幂等一键（vault 文件补齐 → reindex → plan → FEATURE_TREE → coverage 摘要），仍不写正文。  
 MCP：`kmind_bootstrap_preview|status|mark|delegate`；`kmind_capture.bootstrapTask`。
 
 ### 3. MVP → M2 范围
@@ -57,7 +58,9 @@ MCP：`kmind_bootstrap_preview|status|mark|delegate`；`kmind_capture.bootstrapT
 
 ## 明确不做（仍有效）
 
-- 自动 `kmind_capture` 填正文
+> **更新（ADR-005）**：本条「自动 kmind_capture 填正文」在 **显式 opt-in** 的 `kmind bootstrap run --write` / `--dry-run` 下定向放开：逐卡过同一质量闸门、低置信/失败卡片跳过并报告，默认路径（不带 `--write`）行为不变。见 [ADR-005](005-cli-llm-knowledge-build.md)。
+
+- 默认路径自动 `kmind_capture` 填正文（仅 `bootstrap run --write` 例外，见上）
 - Ultra / 高召回扫荡
 - 多实例联邦（M4b）
 - OCR 规则库整包迁入 vault

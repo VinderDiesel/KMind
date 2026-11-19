@@ -64,42 +64,45 @@ export function createCliCodegraphClient(
       found: boolean;
       matches: CodegraphSymbolMatch[];
     }> {
-      const res = await runJson([
-        'query',
-        '-j',
-        '-l',
-        '20',
-        '-p',
-        opts.projectPath,
-        opts.symbol,
-      ]);
-      if (!res.ok || !Array.isArray(res.data)) {
-        return { found: false, matches: [] };
-      }
       const matches: CodegraphSymbolMatch[] = [];
-      for (const row of res.data) {
-        if (!row || typeof row !== 'object') continue;
-        const node = (row as { node?: Record<string, unknown> }).node;
-        if (!node || typeof node.name !== 'string') continue;
-        const filePath =
-          typeof node.filePath === 'string' ? node.filePath : '';
-        const name = node.name;
-        const qn =
-          typeof node.qualifiedName === 'string'
-            ? node.qualifiedName
-            : undefined;
-        if (!symbolNameMatches(opts.symbol, name, qn)) continue;
-        if (opts.file && filePath && !filePathMatches(opts.file, filePath)) {
-          continue;
+      for (const query of buildSymbolQueries(opts.symbol, opts.file)) {
+        const res = await runJson([
+          'query',
+          '-j',
+          '-l',
+          '50',
+          '-p',
+          opts.projectPath,
+          query,
+        ]);
+        if (!res.ok || !Array.isArray(res.data)) continue;
+        for (const row of res.data) {
+          if (!row || typeof row !== 'object') continue;
+          const node = (row as { node?: Record<string, unknown> }).node;
+          if (!node || typeof node.name !== 'string') continue;
+          const filePath =
+            typeof node.filePath === 'string' ? node.filePath : '';
+          const name = node.name;
+          const qn =
+            typeof node.qualifiedName === 'string'
+              ? node.qualifiedName
+              : undefined;
+          if (!symbolNameMatches(opts.symbol, name, qn)) continue;
+          if (opts.file && filePath && !filePathMatches(opts.file, filePath)) {
+            continue;
+          }
+          matches.push({
+            name,
+            filePath,
+            kind: typeof node.kind === 'string' ? node.kind : undefined,
+            qualifiedName: qn,
+            startLine:
+              typeof node.startLine === 'number' ? node.startLine : undefined,
+          });
         }
-        matches.push({
-          name,
-          filePath,
-          kind: typeof node.kind === 'string' ? node.kind : undefined,
-          qualifiedName: qn,
-          startLine:
-            typeof node.startLine === 'number' ? node.startLine : undefined,
-        });
+        // The qualified query already resolved the symbol; do not dilute with
+        // the bare-name fallback (which is often flooded by homonyms).
+        if (matches.length > 0) break;
       }
       return { found: matches.length > 0, matches };
     },
@@ -148,6 +151,26 @@ export function createCliCodegraphClient(
       return out;
     },
   };
+}
+
+/**
+ * Queries to try for a symbol, most specific first.
+ * `FileStem.symbol` disambiguates homonyms such as `resolve` / `create`.
+ */
+export function buildSymbolQueries(symbol: string, file?: string): string[] {
+  const want = symbol.trim();
+  if (!want) return [];
+  const out: string[] = [];
+  const stem = file ? symbolFileStem(file) : '';
+  if (stem && stem !== want) out.push(`${stem}.${want}`);
+  out.push(want);
+  return [...new Set(out)];
+}
+
+function symbolFileStem(file: string): string {
+  const base = file.replace(/\\/g, '/').split('/').pop() ?? '';
+  const dot = base.lastIndexOf('.');
+  return dot > 0 ? base.slice(0, dot) : base;
 }
 
 /**

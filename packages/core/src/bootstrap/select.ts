@@ -37,11 +37,43 @@ const SOURCE_EXT = new Set([
   '.kts',
 ]);
 
+/** Test/fixture trees are excluded from the dig inventory (see bootstrap-rules). */
+const TEST_DIR_NAMES = new Set([
+  'test',
+  'tests',
+  '__tests__',
+  'e2e',
+  'fixtures',
+  '__fixtures__',
+]);
+
+function isTestPath(rel: string): boolean {
+  return rel
+    .replace(/\\/g, '/')
+    .split('/')
+    .some((seg) => TEST_DIR_NAMES.has(seg));
+}
+
 export interface SelectModulesOptions {
   repoRoot: string;
   /** Max depth below repo root when walking (default 5). */
   maxDepth?: number;
+  /**
+   * Split source-heavy modules (default 400 files) into source-bearing subdirs.
+   * Mainly for Java/Gradle repos where `src/main` holds thousands of files.
+   * Set 0 to disable.
+   */
+  refineThreshold?: number;
 }
+
+/** Modules at or above this file count are refined into sub-modules. */
+export const DEFAULT_REFINE_THRESHOLD = 400;
+
+/** How many multi-child levels we may split before keeping the parent module. */
+const MAX_REFINE_SPLIT_DEPTH = 3;
+
+/** Guard against pathological symlink loops while walking single-child chains. */
+const MAX_REFINE_WALK = 12;
 
 export interface SelectModulesResult {
   selected: BootstrapModule[];
@@ -115,9 +147,123 @@ export async function selectModules(
     }
   }
 
-  selected.sort((a, b) => a.path.localeCompare(b.path));
+  const threshold = options.refineThreshold ?? DEFAULT_REFINE_THRESHOLD;
+  const refined =
+    threshold > 0
+      ? await refineOversizedModules(root, selected, threshold)
+      : selected;
+
+  refined.sort((a, b) => a.path.localeCompare(b.path));
   excluded.sort((a, b) => a.path.localeCompare(b.path));
-  return { selected, excluded };
+  return { selected: refined, excluded };
+}
+
+/**
+ * Split oversized Java main-source modules into source-bearing package dirs.
+ * Non-Java modules and small modules pass through untouched.
+ */
+async function refineOversizedModules(
+  repoRoot: string,
+  modules: BootstrapModule[],
+  threshold: number,
+): Promise<BootstrapModule[]> {
+  const out: BootstrapModule[] = [];
+  for (const mod of modules) {
+    if ((mod.fileCount ?? 0) < threshold || !isJavaMainModule(mod.path)) {
+      out.push(mod);
+      continue;
+    }
+    const children = await descendJavaPackages(
+      path.join(repoRoot, mod.path),
+      mod.path,
+      threshold,
+      0,
+    );
+    if (children.length >= 2) out.push(...children);
+    else out.push(mod);
+  }
+  return out;
+}
+
+/** True when the module path sits under `<...>/src/main` (Java/Gradle layout). */
+export function isJavaMainModule(modulePath: string): boolean {
+  return /(^|\/)src\/main(\/|$)/.test(modulePath.replace(/\\/g, '/'));
+}
+
+interface SourceChild {
+  abs: string;
+  rel: string;
+  count: number;
+}
+
+async function descendJavaPackages(
+  absDir: string,
+  relDir: string,
+  threshold: number,
+  splitDepth: number,
+): Promise<BootstrapModule[]> {
+  let abs = absDir;
+  let rel = relDir;
+  let depth = splitDepth;
+  for (let walk = 0; walk < MAX_REFINE_WALK; walk += 1) {
+    const children = await listSourceChildren(abs, rel);
+    if (children.length === 0) return [];
+    if (children.length === 1) {
+      // Package prefixes (com/acme/app/...) carry a single child — walk through
+      // without spending split budget.
+      const only = children[0]!;
+      abs = only.abs;
+      rel = only.rel;
+      continue;
+    }
+    if (depth >= MAX_REFINE_SPLIT_DEPTH) return [];
+    const out: BootstrapModule[] = [];
+    for (const child of children) {
+      if (child.count >= threshold) {
+        const deeper = await descendJavaPackages(
+          child.abs,
+          child.rel,
+          threshold,
+          depth + 1,
+        );
+        if (deeper.length >= 2) {
+          out.push(...deeper);
+          continue;
+        }
+      }
+      out.push({
+        path: normalizeRel(child.rel),
+        kind: 'dir',
+        reason: 'selected',
+        fileCount: child.count,
+      });
+    }
+    return out;
+  }
+  return [];
+}
+
+async function listSourceChildren(
+  absDir: string,
+  relDir: string,
+): Promise<SourceChild[]> {
+  let entries;
+  try {
+    entries = await fs.readdir(absDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const children: SourceChild[] = [];
+  for (const ent of entries) {
+    if (!ent.isDirectory()) continue;
+    if (ent.name.startsWith('.') || EXCLUDE_DIR_NAMES.has(ent.name)) continue;
+    const abs = path.join(absDir, ent.name);
+    const count = await countSourceFiles(abs, 8);
+    if (count > 0) {
+      children.push({ abs, rel: path.join(relDir, ent.name), count });
+    }
+  }
+  return children;
 }
 
 async function collectUnder(
@@ -160,7 +306,12 @@ async function collectUnder(
   // Prefer one module per meaningful subdirectory (storage, compiler, …).
   let usedSub = false;
   for (const sub of subDirs) {
-    const subCount = await countSourceFiles(sub.abs, 3);
+    if (isTestPath(sub.rel)) {
+      pushExcluded(excluded, seen, sub.rel, 'dir', 'test');
+      continue;
+    }
+    // Java layouts bury sources under src/main/java/com/... — count deeper.
+    const subCount = await countSourceFiles(sub.abs, 8);
     if (subCount === 0) {
       pushExcluded(excluded, seen, sub.rel, 'dir', 'no_source');
       continue;

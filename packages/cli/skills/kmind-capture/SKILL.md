@@ -68,7 +68,7 @@ description: >-
 
 对齐 **ADR-004**（确定性工程 × Agent）：系统先出盘点清单，Agent 再按组深挖；**禁止**跳过 bootstrap 直接写总览。
 
-1. **盘点（bootstrap）**：先 `kmind_bootstrap_preview`（或 `kmind bootstrap preview --project <p>`）拿 `BootstrapPlan`。可选 `apply-tree` / `sync-tree`。**bootstrap ≠ complete**。  
+1. **盘点（bootstrap）**：先一键 `kmind bootstrap run --project <p> --repo .`（幂等：补 vault 文件 → reindex → 题单写入 FEATURE_TREE → coverage 摘要；**不写正文**），或 `kmind_bootstrap_preview` / `kmind bootstrap preview` 只读预览。**bootstrap ≠ complete**。  
 2. **深挖（delegate）**：无 group 时看 `recommendedNext`；对每组调用 `kmind_bootstrap_delegate`（或 `kmind bootstrap delegate --group <label>`）拿 DigPacket；按 packet.tasks 用 `codegraph_explore` / Read 深挖；`done` 可跳过。遵循 packet.acceptance（禁止提前宣称 complete）。  
 3. **入库**：`kmind_asset_types` + `kmind_capture_suggest` → 确认 → `kmind_capture` **回灌 `bootstrapTask=<DigTask id>`**（成功回执含 `bootstrapMarked`）或事后 `kmind_bootstrap_mark`；有证据才写 pitfall/tool/problem；**禁止**自动灌正文。  
 4. **成图 + 验收**：薄总览 related 子卡；组末 / 主题末 `kmind_coverage`。`kmind_evolution_queue` 的 bootstrap 项含 `digTaskId` / `groupLabel`，按 `nextAction` 跳转。  

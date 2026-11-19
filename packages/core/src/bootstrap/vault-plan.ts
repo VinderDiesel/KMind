@@ -3,15 +3,18 @@ import type { Vault } from '../storage/vault.js';
 import type { SqliteStore } from '../storage/sqlite-store.js';
 import { createCliCodegraphClient } from '../codegraph/cli-client.js';
 import { inferCodeRootFromVault } from '../query/anchor-fs.js';
-import { OllamaBootstrapLlm } from './llm.js';
+import type { LlmOverrides } from '../llm/types.js';
 import { buildBootstrapPlan } from './plan.js';
 import { loadBootstrapProgress } from './progress.js';
+import { createBootstrapLlmFromConfig } from './provider-llm.js';
 import { loadBootstrapRules } from './rules.js';
 
 export interface VaultBootstrapPlanOptions {
   project: string;
   repoRoot?: string;
   existingAssets?: KnowledgeAsset[];
+  /** ADR-005: provider/model overrides from CLI flags. */
+  llmOverrides?: LlmOverrides;
 }
 
 /**
@@ -42,11 +45,7 @@ export async function buildBootstrapPlanForVault(
 
   const llm =
     boot.llmGrouping || boot.llmPlan
-      ? new OllamaBootstrapLlm({
-          endpoint: boot.llm.endpoint,
-          model: boot.llm.model,
-          timeoutMs: boot.llm.timeoutMs,
-        })
+      ? createBootstrapLlmFromConfig(config, options.llmOverrides)
       : undefined;
 
   return buildBootstrapPlan({
